@@ -339,6 +339,19 @@ with st.sidebar:
     if status['reply_limit'] > 0: st.progress(min(1.0, curr_r / status['reply_limit']))
     st.divider()
     
+    # 🔥🔥🔥 修复后的图片显示代码 🔥🔥🔥
+    with st.expander("⚡ 能量投喂", expanded=True):
+        image_path = None
+        if os.path.exists("pay.png"): image_path = "pay.png"
+        elif os.path.exists("pay.jpg"): image_path = "pay.jpg"
+        
+        if image_path:
+            st.image(image_path, caption="DeepSeek 算力支持", use_container_width=True)
+        else:
+            st.info("暂无图片 (请上传 pay.png)")
+            
+    st.divider()
+    
     # 🔥🔥🔥 紧急修复工具 🔥🔥🔥
     st.markdown("### 🛠️ 运维工具")
     if st.button("🧹 清空缓存 & 重启世界", help="解决图片裂开/文字乱码问题"):
@@ -395,3 +408,4 @@ def render_main():
             if st.button("返回"): st.session_state.view_mode = "lobby"; st.rerun()
 
 render_main()
+

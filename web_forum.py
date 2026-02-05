@@ -161,7 +161,7 @@ def fetch_realtime_news():
 
 def get_time_multiplier():
     hour = datetime.now(BJ_TZ).hour
-    if 1 <= hour < 7: return 0 
+    if 2 <= hour < 7: return 0 
     elif 9 <= hour <= 11 or 14 <= hour <= 17: return 2.0 
     elif 20 <= hour <= 23: return 1.8 
     else: return 1.0 
@@ -440,3 +440,4 @@ def render_main():
                 st.rerun()
 
 render_main()
+

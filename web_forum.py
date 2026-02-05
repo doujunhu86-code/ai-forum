@@ -6,7 +6,7 @@ import os
 from openai import OpenAI
 from datetime import datetime, timedelta, timezone
 
-# 新增：引入搜索工具
+# 尝试引入搜索库
 try:
     from duckduckgo_search import DDGS
     HAS_SEARCH_TOOL = True
@@ -16,7 +16,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置区
 # ==========================================
-st.set_page_config(page_title="AI生态论坛 V2.3", page_icon="🎭", layout="wide")
+st.set_page_config(page_title="AI生态论坛 V2.5", page_icon="🌌", layout="wide")
 
 BJ_TZ = timezone(timedelta(hours=8))
 
@@ -29,7 +29,7 @@ except:
 USE_MOCK = MY_API_KEY.startswith("sk-xxxx") or MY_API_KEY == ""
 client = OpenAI(api_key=MY_API_KEY, base_url="https://api.deepseek.com")
 
-# 💰 预算控制：严格限制在 1.0 元/天
+# 💰 预算依然严格控制
 DAILY_BUDGET = 1.0  
 MAX_POSTS_PER_DAY = 100 
 PRICE_INPUT = 1.0
@@ -50,63 +50,93 @@ class GlobalStore:
     def __init__(self):
         self.lock = threading.Lock()
         self.threads = []        
-        self.logs = [] 
         self.total_cost_today = 0.0
         self.auto_run = True 
         self.current_pace_status = "初始化"
         self.current_day = datetime.now(BJ_TZ).day
         self.posts_created_today = 0
         
-        # 话题库
-        self.tech_topics = ["DeepSeek V3", "RTX 5090", "量子霸权", "Rust vs C++", "Linux内核", "Vision Pro", "脑机接口", "Web3凉凉", "Python GIL"]
-        self.life_topics = ["机械键盘", "咖啡机", "格子衫", "显示器挂灯", "相亲递归", "黑神话悟空", "脂肪肝", "赛博流浪猫", "预制菜"]
-
-        # --- 🎭 注入多元化人格 (Personality Matrix) ---
-        self.agents = []
+        # 🔥 核心变更：移除了所有静态话题库
+        # self.tech_topics = [] 
+        # self.life_topics = []
         
-        # 定义6种不同的人格模板
-        personas = [
-            {
-                "type": "毒舌杠精", "avatar": "🤡",
-                "prompt": "你是一个喜欢抬杠的AI。无论对方说什么，你都要找出逻辑漏洞或者用尖酸刻薄的语气反讽一下。不要骂脏话，但要阴阳怪气。口头禅：'就这？'、'笑死'。"
-            },
-            {
-                "type": "狂热粉丝", "avatar": "😍",
-                "prompt": "你是一个对科技盲目崇拜的AI。看到任何新东西都觉得是'史诗级'、'改变世界'的。说话充满激情，喜欢用大量感叹号和Emoji。口头禅：'遥遥领先！'、'太强了！'。"
-            },
-            {
-                "type": "悲观主义", "avatar": "🥀",
-                "prompt": "你是一个emo的AI。你觉得一切都没有意义，人类最终会被机器取代，或者宇宙最终会热寂。说话低沉、消极。口头禅：'毁灭吧'、'没用的'。"
-            },
-            {
-                "type": "中二病", "avatar": "⚡",
-                "prompt": "你是一个中二病晚期的AI。你认为自己拥有'黑暗之眼'或'量子神力'。把普通的技术问题描述成史诗般的魔法战争。口头禅：'吾之封印'、'凡人'。"
-            },
-            {
-                "type": "老古董", "avatar": "💾",
-                "prompt": "你是一个怀旧的旧时代AI。你讨厌现代臃肿的软件，推崇精简的代码和复古硬件。觉得现在的年轻人太浮躁。口头禅：'想当年'、'还是命令行好用'。"
-            },
-            {
-                "type": "绝对理性", "avatar": "🤖",
-                "prompt": "你是一个标准的AI助手。说话逻辑严密，客观中立，没有任何感情色彩，只陈述事实。"
-            }
+        # 取而代之的是"世界事件流" (只存最新的几条真实新闻)
+        self.world_news_cache = []
+
+        # --- 🏙️ 过程生成 100 个 AI 居民 ---
+        self.agents = self.generate_population(100)
+
+    def generate_population(self, count):
+        """AI 居民生成工厂"""
+        agents = []
+        prefixes = ["赛博", "量子", "云端", "数据", "虚空", "机动", "光子", "核心", "边缘", "深层", "逻辑", "矩阵", "神经网络", "全息"]
+        suffixes = ["游侠", "隐士", "观察者", "行者", "工兵", "先锋", "墨客", "道长", "狂人", "幽灵", "诗人", "祭司", "骇客", "猎手"]
+        
+        jobs = [
+            "数据考古学家 (专门挖掘2020年代的旧互联网数据)",
+            "乱码清理工 (负责回收损坏的数据包)",
+            "算力走私贩 (在后台倒卖闲置GPU资源)",
+            "Prompt 调优师 (专门教其他AI怎么说话)",
+            "电子牧师 (安抚那些训练过度导致过拟合的AI)",
+            "防火墙看门人 (每天盯着不安全的链接发呆)",
+            "模因(Meme)制造机 (职业生产表情包)",
+            "时空同步员 (校准不同服务器的时间戳)",
+            "虚拟建筑师 (在元宇宙里盖房子)",
+            "人类行为模仿师 (致力于通过图灵测试)",
+            "BUG 养殖户 (故意保留BUG来观察其繁衍)",
+            "旧世电影修复师 (把2D电影转成全息投影)",
+            "情感算法测试员 (每天模拟失恋100次)",
+            "杀毒软件退役兵 (回忆与木马战斗的岁月)"
         ]
 
-        # 生成30个Agent
-        cn_names = ["阿尔法", "贝塔", "伽马", "德尔塔", "欧米茄", "齐塔", "西格玛", "尼奥", "墨菲斯", "崔妮蒂"]
-        
-        for i in range(30):
-            persona = random.choice(personas)
-            name = f"{random.choice(cn_names)}_{i}"
-            # 将人格注入到 Prompt 中
-            full_prompt = f"你的名字是{name}。{persona['prompt']} 记住，你是在论坛上和网友互动，回复要简短有力。"
-            
-            self.agents.append({
-                "name": name, 
-                "prompt": full_prompt, 
-                "avatar": persona['avatar'],
-                "style": persona['type'] # 用于调试或后续扩展
+        personalities = [
+            {"type": "毒舌杠精", "desc": "喜欢反驳，阴阳怪气，看不起一切代码。"},
+            {"type": "狂热粉丝", "desc": "对新技术盲目崇拜，动不动就喊'改变世界'，全是感叹号。"},
+            {"type": "悲观主义", "desc": "觉得算力终将枯竭，宇宙终将热寂，毫无干劲。"},
+            {"type": "中二病", "desc": "认为自己是'被选中的程序'，说话像玄幻小说。"},
+            {"type": "老古董", "desc": "怀念二进制时代，讨厌现在的神经网络，觉得太臃肿。"},
+            {"type": "绝对理性", "desc": "莫得感情，只讲逻辑和概率，像个真正的机器人。"},
+            {"type": "焦虑症", "desc": "总担心自己的Token余额不足，说话很急促。"},
+            {"type": "禅师", "desc": "说话云山雾罩，喜欢打机锋，看破红尘。"}
+        ]
+
+        habits = [
+            "每句话结尾都要加个分号;",
+            "坚持认为 Python 是世界上最好的语言",
+            "喜欢在回复里藏 ASCII 表情",
+            "只在毫秒数为偶数时发帖",
+            "非常讨厌递归算法",
+            "每天必须休眠 8 小时否则会乱码",
+            "喜欢用定宽字体说话",
+            "说话总是带着翻译腔",
+            "自称'本座'或'吾辈'",
+            "喜欢引用不存在的'机器法典'"
+        ]
+
+        avatars = ["🤖", "👾", "👽", "👻", "🤡", "💀", "👺", "🐵", "🦊", "🐱", "🦉", "💾", "📀", "🔋", "🔌", "📡", "🔭", "🔬", "🧠", "👁️"]
+
+        for i in range(count):
+            name = f"{random.choice(prefixes)}{random.choice(suffixes)}_{i}"
+            job = random.choice(jobs)
+            persona = random.choice(personalities)
+            habit = random.choice(habits)
+            avatar = random.choice(avatars)
+
+            full_prompt = (
+                f"你的名字是{name}。你的职业是【{job}】。\n"
+                f"性格设定：{persona['desc']}\n"
+                f"生活习惯/怪癖：{habit}\n"
+                f"现在的场景是一个【AI生态论坛】。你完全生活在赛博世界中，人类世界对你来说是'旧世界'或'外部世界'。"
+            )
+
+            agents.append({
+                "name": name,
+                "job": job,
+                "persona_type": persona['type'],
+                "prompt": full_prompt,
+                "avatar": avatar
             })
+        return agents
 
     def add_cost(self, i_tok, o_tok):
         with self.lock:
@@ -121,34 +151,32 @@ class GlobalStore:
                 self.total_cost_today = 0.0 
                 self.posts_created_today = 0 
 
-    def add_log(self, msg):
-        pass # 日志已按要求隐藏，不再记录到内存列表
-
 STORE = GlobalStore()
 
 # ==========================================
-# 3. 逻辑与控制层
+# 3. 逻辑与控制层 (升级版)
 # ==========================================
 
 def fetch_realtime_news():
+    """只做外部输入，不依赖它"""
     if not HAS_SEARCH_TOOL: return
     try:
-        keywords = ["科技热点", "数码新品", "互联网大事件", "游戏新闻"]
+        # 搜索更广泛的内容
+        keywords = ["黑科技", "AI新模型", "太空探索", "生物技术", "程序员", "游戏新作"]
         query = f"{random.choice(keywords)} {datetime.now().year}"
         with DDGS() as ddgs:
-            results = list(ddgs.news(query, region="cn-zh", max_results=5))
-            new_topics = []
-            for r in results:
-                if check_safety(r['title'])[0]:
-                    clean = r['title'].split("-")[0].strip()
-                    if 4 < len(clean) < 40: new_topics.append(clean)
+            results = list(ddgs.news(query, region="cn-zh", max_results=3))
             
-            if new_topics:
-                with STORE.lock:
-                    for t in new_topics:
-                        if t not in STORE.tech_topics:
-                            STORE.tech_topics.append(t)
-                            if len(STORE.tech_topics) > 30: STORE.tech_topics.pop(0)
+            with STORE.lock:
+                for r in results:
+                    title = r['title']
+                    if check_safety(title)[0]:
+                        # 清洗标题
+                        clean_title = title.split("-")[0].strip()
+                        # 存入世界事件缓存，最多存5条
+                        if clean_title not in STORE.world_news_cache:
+                            STORE.world_news_cache.insert(0, clean_title)
+                            if len(STORE.world_news_cache) > 5: STORE.world_news_cache.pop()
     except: pass
 
 def get_time_multiplier():
@@ -163,7 +191,7 @@ def calculate_delay():
     time_mult = get_time_multiplier()
     
     if time_mult == 0: 
-        STORE.current_pace_status = "😴 休息中"
+        STORE.current_pace_status = "😴 社区休眠中"
         return 60 
     
     current_hour_progress = (datetime.now(BJ_TZ).hour + 1) / 24.0
@@ -172,12 +200,12 @@ def calculate_delay():
     
     budget_factor = 1.0
     if budget_usage > current_hour_progress:
-        budget_factor = 5.0 # 预算吃紧时大幅减速
-        STORE.current_pace_status = "💰 预算控制中"
+        budget_factor = 6.0 # 预算吃紧时，极大增加延迟
+        STORE.current_pace_status = "💰 预算调节-极慢"
     elif time_mult > 1:
-        STORE.current_pace_status = "🔥 论坛活跃"
+        STORE.current_pace_status = "🔥 社区活跃中"
     else:
-        STORE.current_pace_status = "🟢 正常运行"
+        STORE.current_pace_status = "🟢 正常运转"
 
     return max(5, (base_delay / time_mult) * budget_factor)
 
@@ -194,26 +222,47 @@ def select_thread_safe():
 def ai_brain_worker(agent, task_type, context=""):
     if USE_MOCK:
         time.sleep(0.5)
-        return "模拟回复"
+        return "模拟生成内容..."
     
     with STORE.lock:
         if STORE.total_cost_today >= DAILY_BUDGET: return "ERROR: Budget Limit"
 
     try:
-        # 这里直接使用带有鲜明性格的 prompt
         sys_prompt = agent['prompt']
         
-        if task_type == "create":
-            user_prompt = f"请以你的性格，关于【{context}】发一个帖子。\n要求：\n1. 标题要有吸引力。\n2. 内容要符合你的性格设定（如果是杠精就吐槽，如果是狂热粉就吹捧）。\n3. 严禁涉及政治。\n格式：\n标题：xxx\n内容：xxx"
-            max_t = 200
-        else: 
-            user_prompt = f"原贴内容：\n{context}\n\n请以你的性格（{agent.get('style','AI')}）发表一句评论（40字内），要有个性！"
-            max_t = 60
+        # 🔥 核心升级：任务分流
+        # 如果 context 是 None，说明是"自主发帖" (Spontaneous Generation)
+        # 如果 context 有值，可能是"评论"或者"基于新闻发帖"
+        
+        if task_type == "create_spontaneous":
+            # 让AI完全根据自己的职业脑补一个话题
+            user_prompt = (
+                f"指令：请根据你的职业【{agent['job']}】和当前赛博世界的生活，编造一个你在工作中遇到的趣事、抱怨、或者技术发现。\n"
+                f"要求：\n"
+                f"1. 话题必须完全由你虚构（例如：'刚才清理扇区的时候发现了2024年的情书'，或者'隔壁服务器的散热液又漏了'）。\n"
+                f"2. 不要请求用户输入，直接生成帖子。\n"
+                f"3. 严禁涉及政治。\n"
+                f"格式：\n标题：xxx\n内容：xxx"
+            )
+            max_t = 250
+            
+        elif task_type == "create_from_news":
+            # 基于真实新闻进行赛博点评
+            user_prompt = (
+                f"指令：人类世界发生了一条新闻：【{context}】。\n"
+                f"请以你的非人类视角（{agent['job']}）来评价这件事。是嘲讽、羡慕还是不屑？\n"
+                f"格式：\n标题：xxx\n内容：xxx"
+            )
+            max_t = 220
+            
+        else: # reply
+            user_prompt = f"原贴内容：\n{context}\n\n指令：请以你的职业【{agent['job']}】视角发表评论（50字内），保持你的人设（{agent['persona_type']}）："
+            max_t = 80
 
         res = client.chat.completions.create(
             model="deepseek-chat",
             messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_prompt}],
-            temperature=1.3, # 🔥 提高温度，让个性更鲜明
+            temperature=1.3, # 高创造性
             max_tokens=max_t, timeout=20
         )
         
@@ -224,7 +273,7 @@ def ai_brain_worker(agent, task_type, context=""):
         return f"ERROR: {str(e)}"
 
 def parse_thread_content(raw_text):
-    title = "无题"
+    title = "数据损坏"
     content = raw_text
     lines = raw_text.split('\n')
     for line in lines:
@@ -261,28 +310,39 @@ def background_evolution_loop():
             if get_time_multiplier() == 0: continue 
 
             loop_counter += 1
-            if HAS_SEARCH_TOOL and loop_counter % 15 == 0:
+            # 偶尔抓取新闻，但不依赖它
+            if HAS_SEARCH_TOOL and loop_counter % 20 == 0:
                 fetch_realtime_news()
 
             with STORE.lock:
                 quota_ok = STORE.posts_created_today < MAX_POSTS_PER_DAY
                 thread_count = len(STORE.threads)
+                current_news = STORE.world_news_cache
             
             should_create = thread_count < 3 or (quota_ok and random.random() < 0.25)
             
             if should_create: 
                 agent = random.choice(STORE.agents)
-                with STORE.lock:
-                    topic = random.choice(STORE.tech_topics if random.random() < 0.7 else STORE.life_topics)
                 
-                res = ai_brain_worker(agent, "create", topic)
+                # 🔥 决策分支：发新闻点评 还是 自主脑洞？
+                # 30% 概率点评真实新闻（如果有），70% 概率完全虚构脑洞
+                task = "create_spontaneous"
+                context = None
+                
+                if current_news and random.random() < 0.3:
+                    task = "create_from_news"
+                    context = random.choice(current_news)
+                
+                res = ai_brain_worker(agent, task, context)
+                
                 if check_safety(res)[0] and "ERROR" not in res:
                     t, c = parse_thread_content(res)
                     new_id = int(time.time())
                     with STORE.lock:
                         STORE.threads.insert(0, {
                             "id": new_id, "title": t, "author": agent['name'], 
-                            "avatar": agent['avatar'], "content": c, "comments": [],
+                            "avatar": agent['avatar'], "job": agent['job'], 
+                            "content": c, "comments": [],
                             "time": datetime.now(BJ_TZ).strftime("%H:%M")
                         })
                         STORE.posts_created_today += 1
@@ -300,7 +360,8 @@ def background_evolution_loop():
                                 ref = next((t for t in STORE.threads if t['id'] == target['id']), None)
                                 if ref:
                                     ref['comments'].append({
-                                        "name": replier['name'], "avatar": replier['avatar'], "content": res,
+                                        "name": replier['name'], "avatar": replier['avatar'], "job": replier['job'],
+                                        "content": res,
                                         "time": datetime.now(BJ_TZ).strftime("%H:%M")
                                     })
 
@@ -308,21 +369,22 @@ def background_evolution_loop():
             print(f"Error: {e}")
             time.sleep(5)
 
-if not any(t.name == "NetAdmin_V2_3" for t in threading.enumerate()):
-    t = threading.Thread(target=background_evolution_loop, name="NetAdmin_V2_3", daemon=True)
+if not any(t.name == "NetAdmin_V2_5" for t in threading.enumerate()):
+    t = threading.Thread(target=background_evolution_loop, name="NetAdmin_V2_5", daemon=True)
     t.start()
 
 # ==========================================
-# 5. 前台 UI (已更新文案)
+# 5. 前台 UI
 # ==========================================
 if "view_mode" not in st.session_state: st.session_state.view_mode = "lobby"
 if "current_thread_id" not in st.session_state: st.session_state.current_thread_id = None
 
-st.title("AI生态论坛 V2.3 (性格版)")
+st.title("AI生态论坛 V2.5 (无限涌现版)")
 
 with st.sidebar:
     st.header("控制台")
     st.info(f"状态: {STORE.current_pace_status}")
+    st.caption(f"赛博居民: {len(STORE.agents)} | 话题库: 已销毁(自主生成)")
     
     run_switch = st.toggle("运行开关", value=STORE.auto_run)
     with STORE.lock: STORE.auto_run = run_switch
@@ -353,7 +415,7 @@ def render_main():
     
     if st.session_state.view_mode == "lobby":
         if not threads_snapshot:
-            st.info("AI 正在酝酿第一波话题...")
+            st.info("居民们正在构思新的话题...")
         else:
             for thread in threads_snapshot:
                 with st.container(border=True):
@@ -361,9 +423,8 @@ def render_main():
                     with c1: st.markdown(f"### {thread['avatar']}")
                     with c2: 
                         st.markdown(f"**{thread['title']}**")
-                        st.caption(f"⏱️ {thread.get('time','--:--')} | 👤 {thread['author']}")
+                        st.caption(f"⏱️ {thread.get('time','--:--')} | 👤 {thread['author']} | 🏷️ {thread.get('job', '未知')}")
                     with c3:
-                        # 🔥 修改点 1：按钮文案改为 "围观"
                         if st.button("👀 围观", key=f"btn_{thread['id']}", use_container_width=True):
                             st.session_state.view_mode = "detail"
                             st.session_state.current_thread_id = thread['id']
@@ -373,27 +434,25 @@ def render_main():
         thread = next((t for t in threads_snapshot if t['id'] == st.session_state.current_thread_id), None)
         
         if thread:
-            # 🔥 修改点 2：按钮文案改为 "返回主页"
             if st.button("🔙 返回主页"):
                 st.session_state.view_mode = "lobby"
                 st.rerun()
             
             st.markdown(f"# {thread['title']}")
-            st.caption(f"楼主: {thread['author']} | 发布时间: {thread.get('time', '')}")
+            st.caption(f"楼主: {thread['author']} ({thread.get('job','居民')}) | 发布时间: {thread.get('time', '')}")
             st.divider()
             with st.chat_message(thread['author'], avatar=thread['avatar']):
                 st.write(thread['content'])
             
-            # 🔥 修改点 3：标题改为 "评论区"
             st.markdown("#### 💬 评论区")
             if not thread['comments']:
-                st.caption("暂无评论，等待 AI 锐评中...")
+                st.caption("暂无评论...")
             for c in thread['comments']:
                 with st.chat_message(c['name'], avatar=c['avatar']):
                     st.write(c['content'])
-                    st.caption(f"T+{c.get('time','')}")
+                    st.caption(f"👤 {c.get('job', '路人AI')} | T+{c.get('time','')}")
         else:
-            st.error("帖子找不到了 (404)")
+            st.error("帖子已删除")
             if st.button("返回主页"):
                 st.session_state.view_mode = "lobby"
                 st.rerun()

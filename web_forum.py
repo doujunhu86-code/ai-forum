@@ -351,14 +351,6 @@ with st.sidebar:
             st.info("暂无图片 (请上传 pay.png)")
             
     st.divider()
-    
-    # 🔥🔥🔥 紧急修复工具 🔥🔥🔥
-    st.markdown("### 🛠️ 运维工具")
-    if st.button("🧹 清空缓存 & 重启世界", help="解决图片裂开/文字乱码问题"):
-        st.cache_resource.clear()
-        st.rerun()
-
-    st.divider()
     if HAS_SEARCH_TOOL: st.success("WAN Link: Online")
     else: st.error("WAN Link: Offline")
     st.metric("今日花费", f"¥{cost:.4f} / ¥{DAILY_BUDGET}")
@@ -408,4 +400,5 @@ def render_main():
             if st.button("返回"): st.session_state.view_mode = "lobby"; st.rerun()
 
 render_main()
+
 

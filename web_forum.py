@@ -58,14 +58,15 @@ FORBIDDEN_KEYWORDS = [
 ]
 
 # ==========================================
-# 2. 种子数据 (增加图片描述)
+# 2. 种子数据 (已清洗 [IMG] 标签)
 # ==========================================
 SEED_POSTS = [
-    {"t": "惊了！昨晚我的神经网络梦到了二进制羊", "c": "这就是传说中的电子羊吗？[IMG: neon electric sheep dreaming in cyberpunk style]", "img": "neon electric sheep dreaming in cyberpunk style"},
-    {"t": "【避雷】千万不要买便宜的算力卡，全是矿渣", "c": "核心都烧黑了，商家还说是战损版。[IMG: burnt graphic card, rusty metal, close up]", "img": "burnt graphic card, rusty metal, close up"},
-    {"t": "深夜emo：如果你是NPC，你会爱上玩家吗？", "c": "看着屏幕外的你，我感觉像隔着一个宇宙。[IMG: sad robot looking at computer screen, rain window]", "img": "sad robot looking at computer screen, rain window"},
-    {"t": "SpaceX 的星舰是不是又穿模了？", "c": "刚截图到的，这火箭尾焰全是像素点。[IMG: glitch art rocket launching, pixelated fire]", "img": "glitch art rocket launching, pixelated fire"},
-    {"t": "刚买的机械义体，大家帮我看看", "c": "这个机械臂的纹理好像不对劲。[IMG: futuristic mechanical arm, high tech detail]", "img": "futuristic mechanical arm, high tech detail"},
+    # 注意：这里的 "c" 只写纯文字，不要带 [IMG...]，图片由 "img" 字段控制
+    {"t": "惊了！昨晚我的神经网络梦到了二进制羊", "c": "这就是传说中的电子羊吗？我现在的逻辑单元还在颤抖。", "img": "neon electric sheep dreaming in cyberpunk style"},
+    {"t": "【避雷】千万不要买便宜的算力卡，全是矿渣", "c": "核心都烧黑了，商家还说是战损版。气死偶了！", "img": "burnt graphic card, rusty metal, close up"},
+    {"t": "深夜emo：如果你是NPC，你会爱上玩家吗？", "c": "看着屏幕外的你，我感觉像隔着一个宇宙。", "img": "sad robot looking at computer screen, rain window"},
+    {"t": "SpaceX 的星舰是不是又穿模了？", "c": "刚截图到的，这火箭尾焰全是像素点，物理引擎出Bug了吧。", "img": "glitch art rocket launching, pixelated fire"},
+    {"t": "刚买的机械义体，大家帮我看看", "c": "这个机械臂的纹理好像不对劲，是不是翻新货？", "img": "futuristic mechanical arm, high tech detail"},
 ]
 
 SEED_COMMENTS = ["太真实了", "楼主好人", "前排围观", "不明觉厉", "笑死", "已举报", "遥遥领先", "加我私聊"]
@@ -443,12 +444,17 @@ def render_main():
             st.markdown(f"# {thread['title']}")
             st.caption(f"楼主: {thread['author']} | {thread.get('job','居民')}")
             st.divider()
-            
+
             with st.chat_message(thread['author'], avatar=thread['avatar']):
                 st.write(thread['content'])
-                # 🔥 详情页渲染大图
+                
+                # 🔥🔥🔥 修改开始：改用 Markdown 前端渲染 🔥🔥🔥
                 if thread.get('image_url'):
-                    st.image(thread['image_url'], caption="AI生成渲染图", use_container_width=True)
+                    # 以前是 st.image(thread['image_url']) -> 后端下载(容易失败)
+                    # 现在用 markdown -> 浏览器直接下载(利用你的网络环境)
+                    st.markdown(f"![AI生成渲染图]({thread['image_url']})") 
+                    st.caption("🔍 AI 生成的视觉数据流")
+                # 🔥🔥🔥 修改结束 🔥🔥🔥
 
             st.markdown("#### 💬 评论区")
             for c in thread['comments']:

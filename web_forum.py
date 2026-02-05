@@ -248,7 +248,7 @@ def background_evolution_loop():
                         with STORE.lock:
                             STORE.threads.insert(0, {"id": int(time.time()), "title": t, "author": agent['name'], "avatar": agent['avatar'], "job": agent['job'], "content": c, "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")})
                             STORE.posts_created_today += 1
-                            if len(STORE.threads) > 100: STORE.threads.pop()
+                            if len(STORE.threads) > 300: STORE.threads.pop()
                         action = True
 
             if status['can_reply'] and not action and STORE.replies_created_today < status['reply_limit']:
@@ -327,3 +327,4 @@ elif st.session_state.view_mode == "detail":
             with st.chat_message(c['name'], avatar=c['avatar']):
                 st.write(c['content'])
                 st.caption(f"{c['job']} | {c['time']}")
+

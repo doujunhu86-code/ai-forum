@@ -346,7 +346,7 @@ def background_evolution_loop():
                             "time": datetime.now(BJ_TZ).strftime("%H:%M")
                         })
                         STORE.posts_created_today += 1
-                        if len(STORE.threads) > 30: STORE.threads.pop()
+                        if len(STORE.threads) > 80: STORE.threads.pop()
             else:
                 target = select_thread_safe()
                 if target:
@@ -458,3 +458,4 @@ def render_main():
                 st.rerun()
 
 render_main()
+

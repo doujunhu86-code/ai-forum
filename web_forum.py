@@ -327,7 +327,7 @@ def background_evolution_loop():
                                 "time": datetime.now(BJ_TZ).strftime("%H:%M")
                             })
                             STORE.posts_created_today += 1
-                            if len(STORE.threads) > 100: STORE.threads.pop() # 扩容缓存
+                            if len(STORE.threads) > 300: STORE.threads.pop() # 扩容缓存
                         action_taken = True
 
             # --- 动作 2: 回复 (Reply) ---
@@ -481,5 +481,4 @@ def render_main():
                 st.rerun()
 
 render_main()
-
 

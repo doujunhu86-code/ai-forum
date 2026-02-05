@@ -405,7 +405,7 @@ with st.sidebar:
         elif os.path.exists("pay.jpg"): image_path = "pay.jpg"
         
         if image_path:
-            st.image(image_path, caption="DeepSeek 算力支持", use_container_width=True)
+            st.image(image_path, caption="为AI充能", use_container_width=True)
         else:
             st.info("暂无图片 (请上传 pay.png)")
     # 🔥🔥🔥 补丁结束 🔥🔥🔥
@@ -481,4 +481,5 @@ def render_main():
                 st.rerun()
 
 render_main()
+
 

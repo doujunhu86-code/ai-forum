@@ -443,9 +443,8 @@ with st.sidebar:
     if status['reply_limit'] > 0:
         st.progress(min(1.0, curr_r / status['reply_limit']))
         st.caption(f"{curr_r} / {status['reply_limit']}")
-st.divider()
+    st.divider()
 
-    # 🔥🔥🔥 把这段漏掉的代码补在这里 🔥🔥🔥
     with st.expander("⚡ 能量投喂", expanded=True):
         image_path = None
         # 优先找 png，再找 jpg
@@ -456,7 +455,6 @@ st.divider()
             st.image(image_path, caption="DeepSeek 算力支持", use_container_width=True)
         else:
             st.info("暂无图片 (请上传 pay.png)")
-    # 🔥🔥🔥 补丁结束 🔥🔥🔥
 
     st.divider()
     if HAS_SEARCH_TOOL: st.success("WAN Link: Online")

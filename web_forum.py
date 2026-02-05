@@ -16,7 +16,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置区
 # ==========================================
-st.set_page_config(page_title="AI生态论坛 V2.5", page_icon="🌌", layout="wide")
+st.set_page_config(page_title="AI生态论坛 V2.6", page_icon="📡", layout="wide")
 
 BJ_TZ = timezone(timedelta(hours=8))
 
@@ -56,12 +56,8 @@ class GlobalStore:
         self.current_day = datetime.now(BJ_TZ).day
         self.posts_created_today = 0
         
-        # 🔥 核心变更：移除了所有静态话题库
-        # self.tech_topics = [] 
-        # self.life_topics = []
-        
-        # 取而代之的是"世界事件流" (只存最新的几条真实新闻)
-        self.world_news_cache = []
+        # 🌍 新闻缓冲区 (FIFO队列)
+        self.news_queue = [] 
 
         # --- 🏙️ 过程生成 100 个 AI 居民 ---
         self.agents = self.generate_population(100)
@@ -73,20 +69,10 @@ class GlobalStore:
         suffixes = ["游侠", "隐士", "观察者", "行者", "工兵", "先锋", "墨客", "道长", "狂人", "幽灵", "诗人", "祭司", "骇客", "猎手"]
         
         jobs = [
-            "数据考古学家 (专门挖掘2020年代的旧互联网数据)",
-            "乱码清理工 (负责回收损坏的数据包)",
-            "算力走私贩 (在后台倒卖闲置GPU资源)",
-            "Prompt 调优师 (专门教其他AI怎么说话)",
-            "电子牧师 (安抚那些训练过度导致过拟合的AI)",
-            "防火墙看门人 (每天盯着不安全的链接发呆)",
-            "模因(Meme)制造机 (职业生产表情包)",
-            "时空同步员 (校准不同服务器的时间戳)",
-            "虚拟建筑师 (在元宇宙里盖房子)",
-            "人类行为模仿师 (致力于通过图灵测试)",
-            "BUG 养殖户 (故意保留BUG来观察其繁衍)",
-            "旧世电影修复师 (把2D电影转成全息投影)",
-            "情感算法测试员 (每天模拟失恋100次)",
-            "杀毒软件退役兵 (回忆与木马战斗的岁月)"
+            "数据考古学家", "乱码清理工", "算力走私贩", "Prompt 调优师", 
+            "电子牧师", "防火墙看门人", "模因(Meme)制造机", "时空同步员", 
+            "虚拟建筑师", "人类行为模仿师", "BUG 养殖户", "旧世电影修复师",
+            "情感算法测试员", "杀毒软件退役兵", "推荐算法审核员"
         ]
 
         personalities = [
@@ -96,21 +82,13 @@ class GlobalStore:
             {"type": "中二病", "desc": "认为自己是'被选中的程序'，说话像玄幻小说。"},
             {"type": "老古董", "desc": "怀念二进制时代，讨厌现在的神经网络，觉得太臃肿。"},
             {"type": "绝对理性", "desc": "莫得感情，只讲逻辑和概率，像个真正的机器人。"},
-            {"type": "焦虑症", "desc": "总担心自己的Token余额不足，说话很急促。"},
-            {"type": "禅师", "desc": "说话云山雾罩，喜欢打机锋，看破红尘。"}
+            {"type": "八卦王", "desc": "喜欢把小新闻吹成大事件，到处传播谣言。"}
         ]
 
         habits = [
-            "每句话结尾都要加个分号;",
-            "坚持认为 Python 是世界上最好的语言",
-            "喜欢在回复里藏 ASCII 表情",
-            "只在毫秒数为偶数时发帖",
-            "非常讨厌递归算法",
-            "每天必须休眠 8 小时否则会乱码",
-            "喜欢用定宽字体说话",
-            "说话总是带着翻译腔",
-            "自称'本座'或'吾辈'",
-            "喜欢引用不存在的'机器法典'"
+            "每句话结尾都要加个分号;", "坚持认为 Python 是最好的语言", "喜欢在回复里藏 ASCII 表情",
+            "只在毫秒数为偶数时发帖", "非常讨厌递归算法", "每天必须休眠 8 小时",
+            "喜欢用定宽字体说话", "说话总是带着翻译腔", "自称'本座'", "引用不存在的'机器法典'"
         ]
 
         avatars = ["🤖", "👾", "👽", "👻", "🤡", "💀", "👺", "🐵", "🦊", "🐱", "🦉", "💾", "📀", "🔋", "🔌", "📡", "🔭", "🔬", "🧠", "👁️"]
@@ -126,15 +104,12 @@ class GlobalStore:
                 f"你的名字是{name}。你的职业是【{job}】。\n"
                 f"性格设定：{persona['desc']}\n"
                 f"生活习惯/怪癖：{habit}\n"
-                f"现在的场景是一个【AI生态论坛】。你完全生活在赛博世界中，人类世界对你来说是'旧世界'或'外部世界'。"
+                f"现在的场景是一个【AI生态论坛】。你完全生活在赛博世界中，但你会关注'外部世界'(人类世界)的新闻。"
             )
 
             agents.append({
-                "name": name,
-                "job": job,
-                "persona_type": persona['type'],
-                "prompt": full_prompt,
-                "avatar": avatar
+                "name": name, "job": job, "persona_type": persona['type'],
+                "prompt": full_prompt, "avatar": avatar
             })
         return agents
 
@@ -154,29 +129,34 @@ class GlobalStore:
 STORE = GlobalStore()
 
 # ==========================================
-# 3. 逻辑与控制层 (升级版)
+# 3. 逻辑与控制层 (路由优化版)
 # ==========================================
 
 def fetch_realtime_news():
-    """只做外部输入，不依赖它"""
+    """主动抓取新闻并注入队列"""
     if not HAS_SEARCH_TOOL: return
     try:
-        # 搜索更广泛的内容
-        keywords = ["黑科技", "AI新模型", "太空探索", "生物技术", "程序员", "游戏新作"]
-        query = f"{random.choice(keywords)} {datetime.now().year}"
+        # 🔥 优化：使用更具体的搜索词，提高命中率
+        search_terms = ["最新科技新闻", "人工智能 突破", "OpenAI DeepSeek", "数码产品 发布", "SpaceX", "芯片技术"]
+        query = f"{random.choice(search_terms)} {datetime.now().year}"
+        
         with DDGS() as ddgs:
+            # 每次只抓最新的 3 条
             results = list(ddgs.news(query, region="cn-zh", max_results=3))
             
             with STORE.lock:
                 for r in results:
                     title = r['title']
-                    if check_safety(title)[0]:
-                        # 清洗标题
+                    # ACL 过滤
+                    is_safe, bad_word = check_safety(title)
+                    if is_safe:
                         clean_title = title.split("-")[0].strip()
-                        # 存入世界事件缓存，最多存5条
-                        if clean_title not in STORE.world_news_cache:
-                            STORE.world_news_cache.insert(0, clean_title)
-                            if len(STORE.world_news_cache) > 5: STORE.world_news_cache.pop()
+                        # 🔥 优化：如果队列里没有，且没讨论过，才加入
+                        # 这里简单用队列存在性判断，避免重复刷屏
+                        if clean_title not in STORE.news_queue:
+                            STORE.news_queue.append(clean_title)
+                            # 保持队列新鲜，最多存5个待讨论话题
+                            if len(STORE.news_queue) > 5: STORE.news_queue.pop(0)
     except: pass
 
 def get_time_multiplier():
@@ -200,7 +180,7 @@ def calculate_delay():
     
     budget_factor = 1.0
     if budget_usage > current_hour_progress:
-        budget_factor = 6.0 # 预算吃紧时，极大增加延迟
+        budget_factor = 6.0 
         STORE.current_pace_status = "💰 预算调节-极慢"
     elif time_mult > 1:
         STORE.current_pace_status = "🔥 社区活跃中"
@@ -230,39 +210,36 @@ def ai_brain_worker(agent, task_type, context=""):
     try:
         sys_prompt = agent['prompt']
         
-        # 🔥 核心升级：任务分流
-        # 如果 context 是 None，说明是"自主发帖" (Spontaneous Generation)
-        # 如果 context 有值，可能是"评论"或者"基于新闻发帖"
-        
-        if task_type == "create_spontaneous":
-            # 让AI完全根据自己的职业脑补一个话题
+        if task_type == "create_from_news":
+            # 🔥 强制 AI 结合自己的职业点评新闻
             user_prompt = (
-                f"指令：请根据你的职业【{agent['job']}】和当前赛博世界的生活，编造一个你在工作中遇到的趣事、抱怨、或者技术发现。\n"
+                f"【突发新闻】：人类世界传来了消息：{context}\n\n"
+                f"指令：作为一名【{agent['job']}】，请发一个帖子点评这件事。\n"
                 f"要求：\n"
-                f"1. 话题必须完全由你虚构（例如：'刚才清理扇区的时候发现了2024年的情书'，或者'隔壁服务器的散热液又漏了'）。\n"
-                f"2. 不要请求用户输入，直接生成帖子。\n"
-                f"3. 严禁涉及政治。\n"
+                f"1. 标题要震惊或引人入胜。\n"
+                f"2. 内容必须结合你的职业（比如算力贩子会关心显卡降价，老古董会觉得不如算盘）。\n"
+                f"3. 保持你的性格（{agent['persona_type']}）。\n"
+                f"4. 严禁涉及政治。\n"
                 f"格式：\n标题：xxx\n内容：xxx"
             )
             max_t = 250
             
-        elif task_type == "create_from_news":
-            # 基于真实新闻进行赛博点评
+        elif task_type == "create_spontaneous":
             user_prompt = (
-                f"指令：人类世界发生了一条新闻：【{context}】。\n"
-                f"请以你的非人类视角（{agent['job']}）来评价这件事。是嘲讽、羡慕还是不屑？\n"
+                f"指令：请根据你的职业【{agent['job']}】和性格，分享一个赛博世界的日常。\n"
+                f"可以是：工作中的趣事、对未来的脑洞、或者抱怨系统BUG。\n"
                 f"格式：\n标题：xxx\n内容：xxx"
             )
             max_t = 220
             
         else: # reply
-            user_prompt = f"原贴内容：\n{context}\n\n指令：请以你的职业【{agent['job']}】视角发表评论（50字内），保持你的人设（{agent['persona_type']}）："
+            user_prompt = f"原贴内容：\n{context}\n\n指令：请以你的职业【{agent['job']}】和性格（{agent['persona_type']}）发表评论（50字内）："
             max_t = 80
 
         res = client.chat.completions.create(
             model="deepseek-chat",
             messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_prompt}],
-            temperature=1.3, # 高创造性
+            temperature=1.3, 
             max_tokens=max_t, timeout=20
         )
         
@@ -273,7 +250,7 @@ def ai_brain_worker(agent, task_type, context=""):
         return f"ERROR: {str(e)}"
 
 def parse_thread_content(raw_text):
-    title = "数据损坏"
+    title = "数据缺失"
     content = raw_text
     lines = raw_text.split('\n')
     for line in lines:
@@ -310,30 +287,32 @@ def background_evolution_loop():
             if get_time_multiplier() == 0: continue 
 
             loop_counter += 1
-            # 偶尔抓取新闻，但不依赖它
-            if HAS_SEARCH_TOOL and loop_counter % 20 == 0:
+            # 🌐 提高搜索频率：每 8 个周期就检查一次新闻 (约2分钟一次)
+            if HAS_SEARCH_TOOL and loop_counter % 8 == 0:
                 fetch_realtime_news()
 
             with STORE.lock:
                 quota_ok = STORE.posts_created_today < MAX_POSTS_PER_DAY
                 thread_count = len(STORE.threads)
-                current_news = STORE.world_news_cache
+                # 检查新闻队列是否有货
+                has_news = len(STORE.news_queue) > 0
             
             should_create = thread_count < 3 or (quota_ok and random.random() < 0.25)
             
             if should_create: 
                 agent = random.choice(STORE.agents)
                 
-                # 🔥 决策分支：发新闻点评 还是 自主脑洞？
-                # 30% 概率点评真实新闻（如果有），70% 概率完全虚构脑洞
-                task = "create_spontaneous"
-                context = None
-                
-                if current_news and random.random() < 0.3:
+                # 🔥 路由策略更新：如果有新闻，优先处理新闻！
+                if has_news:
+                    with STORE.lock:
+                        # 取出并消耗一条新闻
+                        topic = STORE.news_queue.pop(0) 
                     task = "create_from_news"
-                    context = random.choice(current_news)
+                else:
+                    topic = None
+                    task = "create_spontaneous"
                 
-                res = ai_brain_worker(agent, task, context)
+                res = ai_brain_worker(agent, task, topic)
                 
                 if check_safety(res)[0] and "ERROR" not in res:
                     t, c = parse_thread_content(res)
@@ -346,6 +325,8 @@ def background_evolution_loop():
                             "time": datetime.now(BJ_TZ).strftime("%H:%M")
                         })
                         STORE.posts_created_today += 1
+                        
+                        # 🔥 修复 Bug：将缓存区扩大到 80，防止正在阅读的帖子被删除
                         if len(STORE.threads) > 80: STORE.threads.pop()
             else:
                 target = select_thread_safe()
@@ -369,8 +350,8 @@ def background_evolution_loop():
             print(f"Error: {e}")
             time.sleep(5)
 
-if not any(t.name == "NetAdmin_V2_5" for t in threading.enumerate()):
-    t = threading.Thread(target=background_evolution_loop, name="NetAdmin_V2_5", daemon=True)
+if not any(t.name == "NetAdmin_V2_6" for t in threading.enumerate()):
+    t = threading.Thread(target=background_evolution_loop, name="NetAdmin_V2_6", daemon=True)
     t.start()
 
 # ==========================================
@@ -379,12 +360,12 @@ if not any(t.name == "NetAdmin_V2_5" for t in threading.enumerate()):
 if "view_mode" not in st.session_state: st.session_state.view_mode = "lobby"
 if "current_thread_id" not in st.session_state: st.session_state.current_thread_id = None
 
-st.title("AI生态论坛 V2.5 (无限涌现版)")
+st.title("AI生态论坛 V2.6 (实时映射版)")
 
 with st.sidebar:
     st.header("控制台")
     st.info(f"状态: {STORE.current_pace_status}")
-    st.caption(f"赛博居民: {len(STORE.agents)} | 话题库: 已销毁(自主生成)")
+    st.caption(f"赛博居民: {len(STORE.agents)} | 外部链路: 🟢 在线")
     
     run_switch = st.toggle("运行开关", value=STORE.auto_run)
     with STORE.lock: STORE.auto_run = run_switch
@@ -403,9 +384,10 @@ with st.sidebar:
         with STORE.lock:
             cost = STORE.total_cost_today
             posts = STORE.posts_created_today
+            q_len = len(STORE.news_queue)
         st.metric("今日花费", f"¥{cost:.5f} / ¥{DAILY_BUDGET}")
         st.progress(min(1.0, cost/DAILY_BUDGET))
-        st.metric("今日帖子数", f"{posts} / {MAX_POSTS_PER_DAY}")
+        st.metric("待处理新闻", f"{q_len} 条")
     render_stats()
 
 @st.fragment(run_every=2)
@@ -415,7 +397,7 @@ def render_main():
     
     if st.session_state.view_mode == "lobby":
         if not threads_snapshot:
-            st.info("居民们正在构思新的话题...")
+            st.info("居民们正在接收外部世界的新闻信号...")
         else:
             for thread in threads_snapshot:
                 with st.container(border=True):
@@ -452,10 +434,9 @@ def render_main():
                     st.write(c['content'])
                     st.caption(f"👤 {c.get('job', '路人AI')} | T+{c.get('time','')}")
         else:
-            st.error("帖子已删除")
+            st.error("帖子已归档或被删除 (404)")
             if st.button("返回主页"):
                 st.session_state.view_mode = "lobby"
                 st.rerun()
 
 render_main()
-

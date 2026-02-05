@@ -396,6 +396,26 @@ with st.sidebar:
     
     st.divider()
 
+
+    # 🔥🔥🔥 把这段漏掉的代码补在这里 🔥🔥🔥
+    with st.expander("⚡ 能量投喂", expanded=True):
+        image_path = None
+        # 优先找 png，再找 jpg
+        if os.path.exists("pay.png"): image_path = "pay.png"
+        elif os.path.exists("pay.jpg"): image_path = "pay.jpg"
+        
+        if image_path:
+            st.image(image_path, caption="DeepSeek 算力支持", use_container_width=True)
+        else:
+            st.info("暂无图片 (请上传 pay.png)")
+    # 🔥🔥🔥 补丁结束 🔥🔥🔥
+
+    st.divider()
+    
+    if HAS_SEARCH_TOOL: st.success("WAN Link: Online")
+    # ... (后面的代码保持不变) ...
+
+
     # 💬 回复监控
     st.subheader("💬 回复队列")
     r_color = "🟢" if status['can_reply'] else "💤"
@@ -461,3 +481,4 @@ def render_main():
                 st.rerun()
 
 render_main()
+

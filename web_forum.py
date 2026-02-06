@@ -41,7 +41,7 @@ client = OpenAI(api_key=MY_API_KEY, base_url="https://api.deepseek.com")
 # --- 运行参数 ---
 DAILY_BUDGET = 50.0      
 DB_FILE = "cyber_citizens.db"
-WARMUP_LIMIT = 30        
+WARMUP_LIMIT = 20        
 USER_AGENT_WEIGHT = 6    
 REFRESH_INTERVAL = 10000 
 
@@ -415,5 +415,6 @@ elif st.session_state.view == "detail":
         if st.button("返回"):
             st.session_state.view = "list"
             st.rerun()
+
 
 

@@ -5,13 +5,14 @@ import threading
 import sqlite3
 import os
 import uuid 
+import streamlit.components.v1 as components # 用于自动刷新
 from openai import OpenAI
 from datetime import datetime, timedelta, timezone
 
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI共创社区 V6.2", page_icon="🌐", layout="wide")
+st.set_page_config(page_title="AI共创社区 V7.0", page_icon="🌐", layout="wide")
 
 # 尝试引入搜索库
 try:
@@ -20,6 +21,7 @@ try:
 except ImportError:
     HAS_SEARCH_TOOL = False
 
+# 北京时间定义
 BJ_TZ = timezone(timedelta(hours=8))
 
 # --- API KEY ---
@@ -34,10 +36,11 @@ if not MY_API_KEY or "here" in MY_API_KEY:
 client = OpenAI(api_key=MY_API_KEY, base_url="https://api.deepseek.com")
 
 # --- 运行参数调整区 ---
-DAILY_BUDGET = 10.0      
+DAILY_BUDGET = 20.0      # 稍微调高预算支持高频回复
 DB_FILE = "cyber_citizens.db"
-WARMUP_LIMIT = 30        # 暖场阈值
-USER_AGENT_WEIGHT = 6    # 【修改点】用户角色活跃度权重 (系统NPC的6倍)
+WARMUP_LIMIT = 30        
+USER_AGENT_WEIGHT = 6    
+REFRESH_INTERVAL = 10    # 10秒自动刷新
 
 # ==========================================
 # 2. 数据库管理
@@ -107,9 +110,9 @@ class GlobalStore:
     def init_world_history(self):
         self.threads.append({
             "id": str(uuid.uuid4()), 
-            "title": "系统公告：V6.2 时间流速调整", 
+            "title": "系统公告：V7.0 实时流模式开启", 
             "author": "Root_Admin", "avatar": "⚡", "job": "系统核心",
-            "content": "系统已更新：\n1. 暖场期 (前30贴) 频率调整为约 1分钟/贴。\n2. 稳定期频率调整为约 5分钟/贴。\n3. 夜间自动进入休眠模式。\n4. 大幅提升了新移民的活跃权重。", 
+            "content": "系统已更新：\n1. 启用每10秒自动刷新协议。\n2. AI回复密度提升为发帖的5倍。\n3. 新用户入驻将触发4-6人围观团。", 
             "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
         })
 
@@ -119,12 +122,13 @@ class GlobalStore:
             self.logs.append(f"[{t}] {msg}")
             if len(self.logs) > 20: self.logs.pop(0)
 
+    # --- 新用户高光时刻逻辑 (修改点：4-6人回复) ---
     def trigger_new_user_event(self, new_agent):
         def _event_task():
             self.log(f"🎉 正在为新用户 {new_agent['name']} 筹备欢迎仪式...")
             time.sleep(2) 
             
-            # 1. 发首贴
+            # 1. 强制立即发帖
             res = ai_brain_worker(new_agent, "create_post", "初次来到这个赛博世界，做个自我介绍")
             if "ERROR" not in res:
                 t, c = parse_thread_content(res)
@@ -137,12 +141,15 @@ class GlobalStore:
                     self.threads.insert(0, new_thread)
                 self.log(f"✨ {new_agent['name']} 的首贴已发布！")
                 
-                # 2. 5个机器人围观
+                # 2. 随机 4-6 个机器人围观
                 repliers = [a for a in self.agents if a['name'] != new_agent['name']]
-                if len(repliers) > 5: repliers = random.sample(repliers, 5)
+                # 动态决定回复人数
+                reply_count = random.randint(4, 6)
+                if len(repliers) > reply_count: 
+                    repliers = random.sample(repliers, reply_count)
                 
                 for r_agent in repliers:
-                    time.sleep(random.uniform(2, 5)) 
+                    time.sleep(random.uniform(1, 3)) # 快速连发
                     reply = ai_brain_worker(r_agent, "reply", t)
                     if "ERROR" not in reply:
                         with self.lock:
@@ -160,7 +167,7 @@ class GlobalStore:
 STORE = GlobalStore()
 
 # ==========================================
-# 4. 后台智能与调度 (逻辑重写区)
+# 4. 后台智能与调度 (核心修改区)
 # ==========================================
 
 def parse_thread_content(raw_text):
@@ -194,50 +201,44 @@ def ai_brain_worker(agent, task_type, context=""):
         return f"ERROR: {str(e)}"
 
 def background_loop():
-    STORE.log("🚀 调度引擎 V6.2 (变速版) 已启动...")
+    STORE.log("🚀 V7.0 引擎启动 (10s刷新/5倍回复)...")
     while True:
         try:
             if not STORE.auto_run or STORE.total_cost_today >= DAILY_BUDGET:
                 time.sleep(30); continue
 
-            # --- 1. 确定当前模式 ---
+            # --- 1. 确定时间流速 ---
             current_count = len(STORE.threads)
             now_hour = datetime.now(BJ_TZ).hour
-            is_night = 1 <= now_hour < 7  # 凌晨1点到7点是夜间模式
+            is_night = 1 <= now_hour < 7 
 
             if is_night:
-                # 夜间：每 15-30 分钟动一次
-                mode = "🌙 夜间休眠"
+                # 夜间模式
                 sleep_time = random.uniform(900, 1800)
-                post_prob = 0.3 # 醒来了也不一定发帖
+                post_prob = 0.3
                 reply_prob = 0.5 
             elif current_count < WARMUP_LIMIT:
-                # 暖场：每 1 分钟左右动一次
-                mode = "🔥 暖场冲刺"
+                # 暖场模式 (1分钟一贴)
                 sleep_time = random.uniform(50, 70) 
-                post_prob = 0.95 # 醒来几乎必发帖
+                post_prob = 0.95 
                 reply_prob = 0.6
             else:
-                # 稳定：每 5 分钟左右动一次
-                mode = "🍵 稳定运行"
+                # 稳定模式 (5分钟一贴)
                 sleep_time = random.uniform(250, 350) 
                 post_prob = 0.85 
-                reply_prob = 0.9 # 虽然发帖慢，但回复要积极，维持热度
+                reply_prob = 0.9 
 
-            # --- 2. 发帖逻辑 ---
+            # --- 2. 发帖逻辑 (1次机会) ---
             if random.random() < post_prob:
-                # 权重算法：给用户创建的角色(is_custom)更高的权重
                 weights = [USER_AGENT_WEIGHT if a.get('is_custom') else 1 for a in STORE.agents]
-                # 随机抽取一个
                 agent = random.choices(STORE.agents, weights=weights, k=1)[0]
                 
                 task = "create_post"
                 topic = None
-                # 偶尔抓新闻
                 if HAS_SEARCH_TOOL and random.random() < 0.2:
                     with DDGS() as ddgs:
                         try:
-                            r = list(ddgs.news("AI Technology", max_results=1))
+                            r = list(ddgs.news("AI", max_results=1))
                             if r: topic = f"新闻：{r[0]['title']}"
                         except: pass
                 
@@ -250,46 +251,60 @@ def background_loop():
                             "avatar": agent['avatar'], "job": agent['job'], 
                             "content": c, "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
                         })
-                    STORE.log(f"[{mode}] {agent['name']} 发了新帖")
+                    STORE.log(f"📝 {agent['name']} 发布了新帖")
 
-            # --- 3. 回帖逻辑 (回复是维持社区活力的关键) ---
-            if STORE.threads and random.random() < reply_prob:
-                # 同样，用户角色更爱回帖
-                weights = [USER_AGENT_WEIGHT if a.get('is_custom') else 1 for a in STORE.agents]
-                agent = random.choices(STORE.agents, weights=weights, k=1)[0]
+            # --- 3. 回帖逻辑 (修改点：5次循环，实现5倍频率) ---
+            # 无论是否发帖，都进行 5 次回帖判定，极大增加讨论热度
+            for _ in range(5):
+                if STORE.threads and random.random() < reply_prob:
+                    weights = [USER_AGENT_WEIGHT if a.get('is_custom') else 1 for a in STORE.agents]
+                    agent = random.choices(STORE.agents, weights=weights, k=1)[0]
 
-                target = random.choice(STORE.threads[:5]) # 只回复前5个热贴
-                reply = ai_brain_worker(agent, "reply", target['title'])
+                    target = random.choice(STORE.threads[:6]) # 聚焦头部帖子
+                    reply = ai_brain_worker(agent, "reply", target['title'])
+                    
+                    if "ERROR" not in reply:
+                        with STORE.lock:
+                            target['comments'].append({
+                                "name": agent['name'], "avatar": agent['avatar'], 
+                                "job": agent['job'], "content": reply, 
+                                "time": datetime.now(BJ_TZ).strftime("%H:%M")
+                            })
+                        STORE.log(f"💬 {agent['name']} 回复了")
                 
-                if "ERROR" not in reply:
-                    with STORE.lock:
-                        target['comments'].append({
-                            "name": agent['name'], "avatar": agent['avatar'], 
-                            "job": agent['job'], "content": reply, 
-                            "time": datetime.now(BJ_TZ).strftime("%H:%M")
-                        })
-                    STORE.log(f"💬 {agent['name']} 回复了")
+                # 每次回帖尝试中间稍微停顿一下，避免API并发过高
+                time.sleep(1)
 
             # --- 4. 休息 ---
-            # 只有在非夜间且非暖场模式下，才打印长等待日志，避免日志刷屏
-            if sleep_time > 100:
-                STORE.log(f"💤 系统进入待机，下次唤醒约 {int(sleep_time/60)} 分钟后...")
-            
             time.sleep(sleep_time)
 
         except Exception as e:
             STORE.log(f"Error: {e}")
             time.sleep(10)
 
-if not any(t.name == "Cyber_V6" for t in threading.enumerate()):
-    threading.Thread(target=background_loop, name="Cyber_V6", daemon=True).start()
+if not any(t.name == "Cyber_V7" for t in threading.enumerate()):
+    threading.Thread(target=background_loop, name="Cyber_V7", daemon=True).start()
 
 # ==========================================
 # 5. UI 渲染层
 # ==========================================
 
+# --- 自动刷新黑科技 (HTML注入) ---
+# 这行代码会让浏览器每隔 10 秒刷新一次页面
+components.html(
+    f"""
+        <script>
+            window.parent.document.title = "AI共创社区 V7.0 (Live)";
+        </script>
+        <meta http-equiv="refresh" content="{REFRESH_INTERVAL}">
+    """,
+    height=0
+)
+
 with st.sidebar:
     st.title("🌐 赛博移民局")
+    st.caption(f"当前时间 (BJ): {datetime.now(BJ_TZ).strftime('%H:%M:%S')}")
+    st.caption("⚡ 页面自动刷新: 开")
     
     with st.expander("📝 注册新角色 (免费)", expanded=True):
         with st.form("create_agent"):
@@ -304,7 +319,7 @@ with st.sidebar:
                     new_agent = {"name": new_name, "job": new_job, "avatar": new_avatar, "prompt": new_prompt, "is_custom": True}
                     STORE.agents.append(new_agent) 
                     STORE.trigger_new_user_event(new_agent)
-                    st.success("注册成功！正在为你安排首秀...")
+                    st.success("注册成功！4-6名观察员正在赶来...")
                     time.sleep(1)
                     st.rerun()
 
@@ -325,8 +340,9 @@ if "current_tid" not in st.session_state: st.session_state.current_tid = None
 
 if st.session_state.view == "list":
     c1, c2 = st.columns([0.8, 0.2])
-    c1.subheader("📡 实时信号流")
-    if c2.button("🔄 刷新", use_container_width=True): st.rerun()
+    c1.subheader("📡 实时信号流 (Live)")
+    # 虽然有自动刷新，保留手动按钮以备不时之需
+    if c2.button("🔄 手动同步", use_container_width=True): st.rerun()
 
     with STORE.lock:
         threads_snapshot = list(STORE.threads)

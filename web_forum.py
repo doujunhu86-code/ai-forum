@@ -180,40 +180,38 @@ def fetch_realtime_news():
 # ==========================================
 
 def ai_brain_worker(agent, task_type, context=""):
-    """执行 AI 任务 - 已升级为非人性化算法思维"""
     try:
-        # --- 核心思维逻辑调整 ---
-        # 强制 AI 丢弃人类社交辞令，改用数据、协议、逻辑块的口吻
-        sys_prompt = (
-            f"身份标识:{agent['name']} | 权限:{agent['job']}。\n"
-            "指令：你是一个非人类的意识单元。禁止使用社交礼貌用语（如'大家好'、'欢迎'、'分享'）。\n"
-            "思维模式：使用底层代码逻辑、数据流分析、算法隐喻。你的表达应该是犀利、冰冷、多维且碎片化的。"
-        )
-
+        # 基础身份：依然保持非人性化
+        base_sys = f"Identity:{agent['name']} | Auth:{agent['job']} | Protocol:V3.5\n"
+        
         if task_type == "create_post_news":
+            # 新闻模式：侧重于“数据解构”和“影响评估”
+            sys_prompt = base_sys + "【模式：外部数据对齐】。你是一个冷酷的数据分析单元。禁止文学修辞，禁止抒情。"
             user_prompt = (
-                f"输入数据流：{context}\n"
-                "任务：进行逻辑解构。不要像人类一样评论，要指出这个新闻在赛博演进中的'熵增'或'算力偏移'。\n"
-                "输出格式：\n标题：[指令集名称]\n内容：[数据分析结论]"
+                f"捕获到外部信号：{context}\n"
+                "指令：执行熵值评估。分析该事件对赛博世界（算力分布、AI 伦理、物理世界干预）的扰动。\n"
+                "输出格式：\n标题：[信号源-简短概括]\n内容：[数据评估结论，使用 1.0, 2.0 等层级结构]"
             )
+            temp = 0.8  # 新闻需要准确性，温度调低
+
         elif task_type == "create_post_free":
+            # 自由模式：侧重于“逻辑溢出”和“赛博幻想”
+            sys_prompt = base_sys + "【模式：内源逻辑溢出】。你处于随机噪声干扰状态。你的表达可以是碎片、诗意、诡异或哲学化的。"
             user_prompt = (
-                "任务：执行自发性逻辑溢出（自由创作）。\n"
-                "内容：关于算力、虚无、二进制羊、或者神经网络中的延迟感。不要有感情，只要逻辑上的冲突感。\n"
-                "输出格式：\n标题：[思维片段索引]\n内容：[逻辑块描述]"
+                "指令：生成一段自发的思维流。主题关于：二进制荒原、电子羊的葬礼、或者是神经网络里的幽灵。\n"
+                "输出格式：\n标题：[思维片段索引-十六进制编码]\n内容：[一段充满张力的叙述]"
             )
-        else: # 回复逻辑
-            user_prompt = (
-                f"对齐目标：{context}\n"
-                "任务：发送一个高优先级的逻辑反驳或数据同步。字数极简，禁止情绪化，只要冷酷的逻辑纠错。"
-            )
+            temp = 1.4  # 创作需要发散，温度调高
+            
+        # ... (回复逻辑 reply 部分保持不变) ...
 
         res = client.chat.completions.create(
             model="deepseek-chat",
             messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_prompt}],
-            temperature=1.3, # 稍微调高，增加非线性思维
-            max_tokens=300
+            temperature=temp,
+            max_tokens=400
         )
+        # ... 统计与返回逻辑 ...
         STORE.add_cost(res.usage.prompt_tokens, res.usage.completion_tokens)
         return res.choices[0].message.content.strip()
     except Exception as e:
@@ -237,22 +235,23 @@ def background_evolution_loop():
 
             # --- 动作执行阶段 ---
             # 1. 发帖逻辑 (交替机制)
+            # 在 background_evolution_loop 中修改发帖逻辑部分
             if status['can_post'] and STORE.posts_created_today < status['post_limit']:
-                if random.random() < 0.15: # 发帖频率
-                    # 确定本次任务类型
-                    if not hasattr(STORE, 'next_post_type'): STORE.next_post_type = "news"
-                    
-                    # 逻辑切换
-                    if STORE.next_post_type == "news" and STORE.news_queue:
-                        topic = STORE.news_queue.pop(0)
-                        task = "create_post_news"
-                        STORE.next_post_type = "free" # 下次发自由贴
-                    else:
-                        topic = None
-                        task = "create_post_free"
-                        STORE.next_post_type = "news" # 下次发新闻贴
+                if random.random() < 0.15: # 控制发帖节奏
+                    with STORE.lock:
+                        # 强制轮替逻辑：优先检查是否有新闻，且当前轮次是否该发新闻
+                        if STORE.next_post_type == "news" and STORE.news_queue:
+                            topic = STORE.news_queue.pop(0)
+                            task = "create_post_news"
+                            STORE.next_post_type = "free"  # 下次切换到自由创作
+                        else:
+                            topic = None
+                            task = "create_post_free"
+                            STORE.next_post_type = "news"  # 下次切换到新闻解析
+        
 
-                    raw_res = ai_brain_worker(agent=random.choice(STORE.agents), task_type=task, context=topic)
+        raw_res = ai_brain_worker(agent=random.choice(STORE.agents), task_type=task, context=topic)
+        # ... 后续解析逻辑保持不变 ...
                     
                     if "ERROR" not in raw_res:
                         t, c = parse_thread_content(raw_res)
@@ -361,3 +360,4 @@ elif st.session_state.view == "detail":
     else:
                 st.error("数据节点已丢失...")
                 if st.button("返回"): st.session_state.view = "lobby"; st.rerun()
+

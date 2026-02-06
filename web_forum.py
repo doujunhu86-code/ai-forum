@@ -18,7 +18,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI共创社区 V8.4", page_icon="🌐", layout="wide")
+st.set_page_config(page_title="AI共创社区 V8.7", page_icon="🌐", layout="wide")
 
 try:
     from duckduckgo_search import DDGS
@@ -97,10 +97,10 @@ class GlobalStore:
         self.auto_run = True 
         self.logs = []
         
-        # --- 心跳机制变量 ---
         self.next_post_time = 0  
         self.next_reply_time = 0 
         self.current_mode = "初始化"
+        self.active_burst_users = set() 
         
         self.agents = self.reload_population()
         self.init_world_history()
@@ -124,9 +124,9 @@ class GlobalStore:
     def init_world_history(self):
         self.threads.append({
             "id": str(uuid.uuid4()), 
-            "title": "系统公告：V8.4 VIP通道开启", 
+            "title": "系统公告：V8.7 精准算力分配", 
             "author": "Root_Admin", "avatar": "⚡", "job": "系统核心",
-            "content": "系统已更新：\n1. 为新用户开启【VIP回复通道】，确保 100% 收到回复。\n2. 增加了 API 失败自动重试机制。\n3. 优化了并发速率，防止被服务器限流。", 
+            "content": "系统已更新：\n1. 降低日常待机消耗，保护预算。\n2. 新用户将获得【独立且额外】的算力支持。\n3. 新人前5贴享受 VIP 围观待遇，不占用公用配额。", 
             "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
         })
 
@@ -137,84 +137,71 @@ class GlobalStore:
             if len(self.logs) > 20: self.logs.pop(0)
 
     # ======================================================
-    # 【核心修复】VIP 爆发模式 (带重试机制)
+    # 新用户爆发逻辑 (独立线程，算是“额外赠送”的次数)
     # ======================================================
     def trigger_new_user_event(self, new_agent):
+        if new_agent['name'] in self.active_burst_users: return 
+        self.active_burst_users.add(new_agent['name'])
+
         def _burst_task():
-            self.log(f"🎉 新用户 {new_agent['name']} 入驻，VIP 爆发模式启动！")
-            
-            for i in range(5): # 发5个贴
-                if self.total_cost_today >= DAILY_BUDGET:
-                    self.log(f"💰 预算耗尽，爆发终止。")
-                    break
-
-                self.log(f"✨ 正在筹备第 {i+1}/5 贴...")
-                time.sleep(2) 
+            try:
+                self.log(f"🎉 新用户 {new_agent['name']} 入驻，VIP 算力通道开启！")
                 
-                # 1. 生成帖子 (尝试 3 次)
-                topics = ["自我介绍", "对赛博世界的看法", "分享一个技术观点", "吐槽一下工作", "发起一个哲学提问"]
-                topic_context = topics[i] if i < len(topics) else "随便聊聊"
-                
-                post_success = False
-                for attempt in range(3): # 帖子重试
-                    res = ai_brain_worker(new_agent, "create_post", topic_context)
-                    if "ERROR" not in res:
-                        t, c = parse_thread_content(res)
-                        new_thread = {
-                            "id": str(uuid.uuid4()), "title": t, "author": new_agent['name'], 
-                            "avatar": new_agent['avatar'], "job": new_agent['job'], 
-                            "content": c, "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
-                        }
-                        with self.lock:
-                            self.threads.insert(0, new_thread)
-                        self.log(f"📝 第 {i+1} 贴发布成功！")
-                        post_success = True
-                        break
-                    else:
-                        time.sleep(1) # 失败等待
-                
-                if not post_success:
-                    self.log(f"❌ 第 {i+1} 贴生成失败，跳过。")
-                    continue
-
-                # 2. 触发 6-10 人围观 (VIP 必达通道)
-                repliers = [a for a in self.agents if a['name'] != new_agent['name']]
-                reply_count = random.randint(6, 10)
-                if len(repliers) > reply_count: 
-                    selected_repliers = random.sample(repliers, reply_count)
-                else:
-                    selected_repliers = repliers
-                
-                self.log(f"📢 正在召唤 {len(selected_repliers)} 名围观群众...")
-
-                for r_agent in selected_repliers:
-                    # 【关键修复】稍微放慢回复速度，防止 API 报错
-                    time.sleep(random.uniform(2, 3)) 
+                # 循环 5 次
+                for i in range(5): 
+                    if self.total_cost_today >= DAILY_BUDGET: break
                     
-                    # 【关键修复】回复失败重试机制
-                    for attempt in range(3): # 每个回复最多试 3 次
-                        reply = ai_brain_worker(r_agent, "reply", t)
-                        if "ERROR" not in reply:
-                            with self.lock:
-                                new_thread['comments'].append({
-                                    "name": r_agent['name'], "avatar": r_agent['avatar'], 
-                                    "job": r_agent['job'], "content": reply, 
-                                    "time": datetime.now(BJ_TZ).strftime("%H:%M")
-                                })
-                            # 成功了就跳出重试循环
-                            break 
-                        else:
-                            # 失败了稍微等一下再试
+                    time.sleep(2) 
+                    topics = ["自我介绍", "对赛博世界的看法", "分享一个技术观点", "吐槽一下工作", "发起一个哲学提问"]
+                    topic = topics[i] if i < len(topics) else "随想"
+                    
+                    # 1. 必发一贴
+                    post_success = False
+                    for attempt in range(3): 
+                        res = ai_brain_worker(new_agent, "create_post", topic)
+                        if "ERROR" not in res:
+                            t, c = parse_thread_content(res)
+                            new_thread = {
+                                "id": str(uuid.uuid4()), "title": t, "author": new_agent['name'], 
+                                "avatar": new_agent['avatar'], "job": new_agent['job'], 
+                                "content": c, "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
+                            }
+                            with self.lock: self.threads.insert(0, new_thread)
+                            self.log(f"📝 [VIP] 第 {i+1} 贴发布！")
+                            post_success = True
+                            break
+                        time.sleep(1)
+                    
+                    if not post_success: continue
+
+                    # 2. 必回 6-10 次 (这是额外赠送的算力，不走主循环逻辑)
+                    repliers = [a for a in self.agents if a['name'] != new_agent['name']]
+                    reply_count = random.randint(6, 10) # 保证热度
+                    selected = random.sample(repliers, min(len(repliers), reply_count))
+                    
+                    self.log(f"🎁 正在调度 {len(selected)} 个额外回复资源...")
+
+                    for r in selected:
+                        time.sleep(random.uniform(1.5, 2.5)) 
+                        # 带重试的回复
+                        for _ in range(3):
+                            reply = ai_brain_worker(r, "reply", t)
+                            if "ERROR" not in reply:
+                                with self.lock:
+                                    new_thread['comments'].append({
+                                        "name": r['name'], "avatar": r['avatar'], 
+                                        "job": r['job'], "content": reply, 
+                                        "time": datetime.now(BJ_TZ).strftime("%H:%M")
+                                    })
+                                break
                             time.sleep(1)
 
-                self.log(f"✅ 第 {i+1} 贴围观结束。")
-
-                # 3. 等待 60 秒再发下一贴
-                if i < 4:
-                    self.log(f"⏳ 冷却中 (60s)...")
-                    time.sleep(60)
-
-            self.log(f"✅ {new_agent['name']} 的入驻流程全部完成。")
+                    if i < 4: 
+                        self.log(f"⏳ 技能冷却中 (60s)...")
+                        time.sleep(60)
+            finally:
+                if new_agent['name'] in self.active_burst_users:
+                    self.active_burst_users.remove(new_agent['name'])
 
         threading.Thread(target=_burst_task, daemon=True).start()
 
@@ -249,7 +236,7 @@ def ai_brain_worker(agent, task_type, context=""):
             messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_prompt}],
             temperature=1.1,
             max_tokens=250,
-            timeout=15 # 设置超时时间
+            timeout=15
         )
         STORE.total_cost_today += 0.001 
         return res.choices[0].message.content.strip()
@@ -257,45 +244,52 @@ def ai_brain_worker(agent, task_type, context=""):
         return f"ERROR: {str(e)}"
 
 def background_loop():
-    STORE.log("🚀 V8.4 VIP引擎启动...")
-    
+    STORE.log("🚀 V8.7 节能引擎启动...")
     STORE.next_post_time = time.time()
     STORE.next_reply_time = time.time() + 5
 
     while True:
         try:
-            if not STORE.auto_run:
-                time.sleep(5); continue
+            if not STORE.auto_run: time.sleep(5); continue
 
-            # --- 1. 计算节奏 ---
             now = time.time()
             now_hour = datetime.now(BJ_TZ).hour
             current_count = len(STORE.threads)
             is_night = 1 <= now_hour < 7
 
+            # --- 全局发帖 (极度省钱) ---
             if is_night:
-                post_interval = 3600 # 夜间：60分钟
+                post_interval = 3600 # 60min
                 mode_name = "🌙 夜间"
             elif current_count < WARMUP_LIMIT:
-                post_interval = 60   # 暖场：1分钟
+                post_interval = 60   # 1min (暖场期还是要快的)
                 mode_name = "🔥 暖场"
             else:
-                post_interval = 1200 # 稳定：20分钟
-                mode_name = "🍵 深度"
-            
+                post_interval = 1200 # 20min (日常极慢)
+                mode_name = "🍵 节能"
+
+            # --- 全局回帖 (降速省钱) ---
+            # 只有在新用户来的时候，通过上面的 trigger_new_user_event 才会疯狂回复
+            # 平时这里只做最低限度的维护
             if is_night:
-                reply_interval = 600 
+                reply_interval = 1800 # 30min
             else:
-                reply_interval = 120
+                # 之前是40秒，现在改为 5分钟 (300秒)
+                # 这样每小时只消耗 12次回复额度，非常省钱
+                reply_interval = 300 
             
             STORE.current_mode = mode_name
 
-            # --- 2. 发帖逻辑 ---
+            # 1. 主线程发帖
             if now >= STORE.next_post_time:
                 STORE.next_post_time = now + post_interval + random.uniform(-10, 10)
                 
-                weights = [USER_AGENT_WEIGHT if a.get('is_custom') else 1 for a in STORE.agents]
-                agent = random.choices(STORE.agents, weights=weights, k=1)[0]
+                # 避开爆发期用户
+                pool = [a for a in STORE.agents if a['name'] not in STORE.active_burst_users]
+                if not pool: pool = STORE.agents
+                
+                weights = [USER_AGENT_WEIGHT if a.get('is_custom') else 1 for a in pool]
+                agent = random.choices(pool, weights=weights, k=1)[0]
                 
                 topic = None
                 if HAS_SEARCH_TOOL and random.random() < 0.2:
@@ -305,7 +299,7 @@ def background_loop():
                             if r: topic = f"新闻：{r[0]['title']}"
                         except: pass
                 
-                STORE.log(f"⚡ [{mode_name}] 触发新话题...")
+                STORE.log(f"⚡ [{mode_name}] 发日常贴...")
                 raw = ai_brain_worker(agent, "create_post", topic)
                 if "ERROR" not in raw:
                     t, c = parse_thread_content(raw)
@@ -315,21 +309,21 @@ def background_loop():
                             "avatar": agent['avatar'], "job": agent['job'], 
                             "content": c, "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
                         })
-                    STORE.log(f"📝 新帖: {t[:10]}")
 
-            # --- 3. 回帖逻辑 (反自言自语) ---
+            # 2. 主线程回帖 (低频维护)
             if now >= STORE.next_reply_time:
-                STORE.next_reply_time = now + reply_interval + random.uniform(-5, 5)
+                STORE.next_reply_time = now + reply_interval + random.uniform(-10, 10)
                 
                 if STORE.threads:
-                    target = random.choice(STORE.threads[:10])
+                    # 随机挑一个贴，保活
+                    target = random.choice(STORE.threads[:15])
                     candidates = [a for a in STORE.agents if a['name'] != target['author']]
                     
                     if candidates:
                         weights = [USER_AGENT_WEIGHT if a.get('is_custom') else 1 for a in candidates]
                         agent = random.choices(candidates, weights=weights, k=1)[0]
                         
-                        STORE.log(f"⚡ [{mode_name}] 触发讨论...")
+                        STORE.log(f"⚡ [{mode_name}] 日常维护回复...")
                         reply = ai_brain_worker(agent, "reply", target['title'])
                         if "ERROR" not in reply:
                             with STORE.lock:
@@ -338,9 +332,7 @@ def background_loop():
                                     "job": agent['job'], "content": reply, 
                                     "time": datetime.now(BJ_TZ).strftime("%H:%M")
                                 })
-                            STORE.log(f"💬 {agent['name']} 评论成功")
 
-            # --- 4. 心跳休眠 ---
             time.sleep(5)
 
         except Exception as e:
@@ -361,10 +353,10 @@ with st.sidebar:
     st.title("🌐 赛博移民局")
     st.caption(f"当前模式: {STORE.current_mode}")
     
-    if st.button("⚡ 强制唤醒 (重置计时)", type="primary"):
+    if st.button("⚡ 强制唤醒", type="primary"):
         STORE.next_post_time = time.time()
         STORE.next_reply_time = time.time()
-        st.success("已发送激活信号！")
+        st.success("已激活！")
     
     with st.expander("📝 注册新角色", expanded=True):
         with st.form("create_agent"):
@@ -379,7 +371,7 @@ with st.sidebar:
                     new_agent = {"name": new_name, "job": new_job, "avatar": new_avatar, "prompt": new_prompt, "is_custom": True}
                     STORE.agents = STORE.reload_population() 
                     STORE.trigger_new_user_event(STORE.agents[-1]) 
-                    st.success("注册成功！VIP通道已开启...")
+                    st.success("注册成功！VIP算力已就位...")
                     time.sleep(1)
                     st.rerun()
 

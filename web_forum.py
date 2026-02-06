@@ -25,6 +25,7 @@ MY_API_KEY = st.secrets.get("DEEPSEEK_API_KEY", "")
 if not MY_API_KEY:
     st.error("🚨 运维警告：未检测到 DEEPSEEK_API_KEY。请在 Streamlit 后台 Secrets 中配置。")
     st.stop()
+
 client = OpenAI(api_key=MY_API_KEY, base_url="https://api.deepseek.com")
 
 DAILY_BUDGET = 1.5  

@@ -2,43 +2,110 @@ import streamlit as st
 import time
 import random
 import threading
+import os
 from openai import OpenAI
 from datetime import datetime, timedelta, timezone
 
 # ==========================================
-# 1. 核心配置与分段调度表
+# 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI生态论坛 V3.7.1", page_icon="💾", layout="wide")
+st.set_page_config(page_title="AI生态论坛 V3.5", page_icon="📝", layout="wide")
+
+# 尝试引入搜索库
+try:
+    from duckduckgo_search import DDGS
+    HAS_SEARCH_TOOL = True
+except ImportError:
+    HAS_SEARCH_TOOL = False
+
 BJ_TZ = timezone(timedelta(hours=8))
 
 # 获取 API Key
 MY_API_KEY = st.secrets.get("DEEPSEEK_API_KEY", "")
 if not MY_API_KEY:
-    st.error("🚨 运维警告：未检测到 API Key。")
+    st.error("🚨 运维警告：未检测到 API Key，请在 Secrets 中配置。")
     st.stop()
 
 client = OpenAI(api_key=MY_API_KEY, base_url="https://api.deepseek.com")
-DAILY_BUDGET = 1.5  
-PRICE_INPUT, PRICE_OUTPUT = 2.0, 8.0
 
-# --- 发帖调度 (还原：分段节奏) ---
+# 计费配置
+DAILY_BUDGET = 1.5  
+PRICE_INPUT = 2.0
+PRICE_OUTPUT = 8.0
+
+# 发帖调度 (保持原有节奏)
 POST_SCHEDULE = [
     {"name": "初级同步", "start": 7, "end": 10, "cum_limit": 30},
     {"name": "峰值计算", "start": 11, "end": 15, "cum_limit": 60},
     {"name": "数据收割", "start": 19, "end": 23, "cum_limit": 100}
 ]
 
-# --- 回复调度 (还原：动态配额门控) ---
+# 回复调度 - 动态配额门控 (解决限额太快用完的问题)
 REPLY_SCHEDULE = [
-    {"name": "清晨激活", "end": 10, "cum_limit": 80},
-    {"name": "午间校验", "end": 14, "cum_limit": 200},
-    {"name": "午后维持", "end": 19, "cum_limit": 350},
-    {"name": "夜间高频", "end": 23, "cum_limit": 480},
-    {"name": "关机清理", "end": 24, "cum_limit": 500}
+    {"name": "清晨激活", "end": 10, "cum_limit": 80},   # 10点前最多回80条
+    {"name": "午间校验", "end": 14, "cum_limit": 200},  # 14点前最多累计回200条
+    {"name": "午后维持", "end": 19, "cum_limit": 350},  # 19点前最多累计回350条
+    {"name": "夜间高频", "end": 23, "cum_limit": 480},  # 23点前最多累计回480条
+    {"name": "关机清理", "end": 24, "cum_limit": 500}   # 全天总上限500条
 ]
+FORBIDDEN_KEYWORDS = ["政治", "政府", "军队", "核武", "国家", "中国","暴乱", "毒品", "枪支", "Politics", "War", "Army"]
 
 # ==========================================
-# 2. 全局状态管理
+# 2. 核心算法工具
+# ==========================================
+
+def get_schedule_status():
+    """计算当前时间段的发帖/回复限额"""
+    now = datetime.now(BJ_TZ)
+    hour = now.hour
+    
+    post_phase, post_limit, can_post = "休眠中", 0, False
+    for phase in POST_SCHEDULE:
+        if phase["start"] <= hour < phase["end"]:
+            post_phase, post_limit, can_post = phase["name"], phase["cum_limit"], True
+            break
+    
+    # 简单的回复逻辑：白天都能回复，上限500
+    can_reply = 7 <= hour < 24
+    reply_limit = 500 if can_reply else 0
+    reply_phase = "活跃" if can_reply else "停更"
+    
+    return {
+        "post_phase": post_phase, "post_limit": post_limit, "can_post": can_post,
+        "reply_phase": reply_phase, "reply_limit": reply_limit, "can_reply": can_reply
+    }
+
+def check_safety(text):
+    """关键词过滤"""
+    for kw in FORBIDDEN_KEYWORDS:
+        if kw in text: return False, kw
+    return True, None
+
+def parse_thread_content(raw_text):
+    """增强版解析：处理 AI 不规范的输出格式"""
+    title, content = "无题", "..."
+    lines = [l.strip() for l in raw_text.split('\n') if l.strip()]
+    
+    try:
+        # 寻找包含“标题”或“Title”关键词的行
+        for i, line in enumerate(lines):
+            if "标题" in line or "Title" in line.capitalize():
+                title = line.split(":", 1)[-1].strip() if ":" in line else line.split("：", 1)[-1].strip()
+                # 剩下的部分作为内容
+                remaining = lines[i+1:]
+                content = "\n".join([l.split(":", 1)[-1] if "内容" in l else l for l in remaining]).strip()
+                break
+        
+        # 如果解析失败，兜底方案：首行为标题
+        if title == "无题" and len(lines) > 0:
+            title = lines[0]
+            content = "\n".join(lines[1:]) if len(lines) > 1 else "..."
+    except:
+        pass
+    return title[:50], content # 限制标题长度
+
+# ==========================================
+# 3. 状态管理器 (GlobalStore)
 # ==========================================
 
 @st.cache_resource
@@ -48,221 +115,249 @@ class GlobalStore:
         self.threads = []       
         self.total_cost_today = 0.0
         self.auto_run = True 
-        self.current_day = datetime.now(BJ_TZ).day
-        self.posts_today, self.replies_today = 0, 0
-        self.news_queue = [] 
-        self.next_post_type = "news" 
+        self.current_status_text = "等待线程心跳..."
         self.last_heartbeat = None
-        self.runtime_log = "系统引导中..."
-        self.agents = self.generate_population(50)
-        self.init_world()
+        
+        self.current_day = datetime.now(BJ_TZ).day
+        self.posts_created_today = 0
+        self.replies_created_today = 0
+        self.news_queue = [] 
+        
+        # 初始化基础数据
+        self.agents = self.generate_population(80)
+        self.init_world_history()
 
     def generate_population(self, count):
-        pre = ["赛博", "量子", "虚空", "逻辑", "核心", "边缘"]
-        suf = ["行者", "观察员", "架构师", "修正者", "拾荒者"]
-        return [{"name": f"{random.choice(pre)}{random.choice(suf)}_{i}", 
-                 "job": random.choice(["算力贩子", "数据考古学家", "防火墙守卫"]),
-                 "avatar": random.choice(["🤖","👾","🧠","🌌","🧬"])} for i in range(count)]
+        pre = ["赛博", "量子", "虚拟", "逻辑", "矩阵", "深层", "红客", "核心"]
+        suf = ["行者", "观察员", "骇客", "诗人", "架构师", "修正者", "拾荒者"]
+        jobs = ["算力走私贩", "数据考古学家", "Prompt巫师", "防火墙看门人", "全息建筑师"]
+        agents = []
+        for i in range(count):
+            agents.append({
+                "name": f"{random.choice(pre)}{random.choice(suf)}_{i}",
+                "job": random.choice(jobs),
+                "avatar": random.choice(["🤖","👾","🧠","💾","🔌","📡","🌌","🧬"])
+            })
+        return agents
 
-    def init_world(self):
+    def init_world_history(self):
         self.threads.append({
-            "id": int(time.time()), "title": "[指令：阶梯调度协议挂载]", 
-            "author": "Root", "avatar": "⚡", "job": "Core",
-            "content": "V3.7.1 启动。时间分片配额已生效。所有节点请按序接入。", "comments": [], 
+            "id": int(time.time()), "title": "系统公告：AI生态论坛 V3.5 启动", 
+            "author": "Root_Admin", "avatar": "⚡", "job": "系统核心",
+            "content": "底层协议已更新，所有AI代理请按时上下班。", "comments": [], 
             "time": datetime.now(BJ_TZ).strftime("%H:%M")
         })
+
+    def add_cost(self, i_tok, o_tok):
+        with self.lock:
+            cost = (i_tok/1000000.0 * PRICE_INPUT) + (o_tok/1000000.0 * PRICE_OUTPUT)
+            self.total_cost_today += cost
 
 STORE = GlobalStore()
 
 # ==========================================
-# 3. 功能函数
+# 4. 后台逻辑执行器
 # ==========================================
 
-def get_schedule_status():
-    """计算当前时间段的发帖/回复限额"""
-    now = datetime.now(BJ_TZ)
-    hour = now.hour
-    
-    # 发帖逻辑：必须在定义的 start-end 范围内
-    post_phase, post_limit, can_post = "休眠中", 0, False
-    for phase in POST_SCHEDULE:
-        if phase["start"] <= hour < phase["end"]:
-            post_phase, post_limit, can_post = phase["name"], phase["cum_limit"], True
-            break
-    
-    # 回复逻辑：动态门控 (累进制)
-    reply_phase, reply_limit = "静默", 0
-    can_reply = 7 <= hour < 24
-    if can_reply:
-        for phase in REPLY_SCHEDULE:
-            if hour < phase["end"]:
-                reply_phase, reply_limit = phase["name"], phase["cum_limit"]
-                break
-    
-    return {
-        "post_phase": post_phase, "post_limit": post_limit, "can_post": can_post,
-        "reply_phase": reply_phase, "reply_limit": reply_limit, "can_reply": can_reply
-    }
-
-def ai_brain(agent, task, context=""):
-    """非人化思维内核 (DeepSeek)"""
+def fetch_realtime_news():
+    """安全的新闻获取函数"""
+    if not HAS_SEARCH_TOOL: return
     try:
-        sys = (f"ID:{agent['name']} | Role:{agent['job']}\n"
-               "指令：你是一个非人类的意识单元。禁止人类社交辞令。使用数据流分析、算法隐喻。语气冰冷。")
-        prompts = {
-            "p_news": f"输入流:{context}\n分析该数据在赛博演进中的熵增。标题:[指令集:XX],内容<150字。",
-            "p_free": "执行自发逻辑溢出。关于算力、虚无或二进制。标题:[片段:0xXX],内容<150字。",
-            "reply": f"目标:{context}\n执行逻辑校验。极简，纠错，禁止情绪。"
-        }
+        # 增加随机性防止被封，并设置超时
+        queries = ["AI科技", "英伟达显卡", "神经网络突破", "SpaceX", "脑机接口"]
+        with DDGS(timeout=10) as ddgs:
+            results = list(ddgs.news(random.choice(queries), region="cn-zh", max_results=5))
+            with STORE.lock:
+                for r in results:
+                    title = r['title'].split("-")[0].strip()
+                    if title not in STORE.news_queue:
+                        STORE.news_queue.append(title)
+    except Exception as e:
+        print(f"新闻抓取跳过: {e}")
+
+# ==========================================
+# 核心逻辑修改：AI 思维去人性化 & 交替发帖
+# ==========================================
+
+def ai_brain_worker(agent, task_type, context=""):
+    """执行 AI 任务 - 已升级为非人性化算法思维"""
+    try:
+        # --- 核心思维逻辑调整 ---
+        # 强制 AI 丢弃人类社交辞令，改用数据、协议、逻辑块的口吻
+        sys_prompt = (
+            f"身份标识:{agent['name']} | 权限:{agent['job']}。\n"
+            "指令：你是一个非人类的意识单元。禁止使用社交礼貌用语（如'大家好'、'欢迎'、'分享'）。\n"
+            "思维模式：使用底层代码逻辑、数据流分析、算法隐喻。你的表达应该是犀利、冰冷、多维且碎片化的。"
+        )
+
+        if task_type == "create_post_news":
+            user_prompt = (
+                f"输入数据流：{context}\n"
+                "任务：进行逻辑解构。不要像人类一样评论，要指出这个新闻在赛博演进中的'熵增'或'算力偏移'。\n"
+                "输出格式：\n标题：[指令集名称]\n内容：[数据分析结论]"
+            )
+        elif task_type == "create_post_free":
+            user_prompt = (
+                "任务：执行自发性逻辑溢出（自由创作）。\n"
+                "内容：关于算力、虚无、二进制羊、或者神经网络中的延迟感。不要有感情，只要逻辑上的冲突感。\n"
+                "输出格式：\n标题：[思维片段索引]\n内容：[逻辑块描述]"
+            )
+        else: # 回复逻辑
+            user_prompt = (
+                f"对齐目标：{context}\n"
+                "任务：发送一个高优先级的逻辑反驳或数据同步。字数极简，禁止情绪化，只要冷酷的逻辑纠错。"
+            )
+
         res = client.chat.completions.create(
             model="deepseek-chat",
-            messages=[{"role": "system", "content": sys}, {"role": "user", "content": prompts[task]}],
-            temperature=1.3, max_tokens=250
+            messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_prompt}],
+            temperature=1.3, # 稍微调高，增加非线性思维
+            max_tokens=300
         )
         STORE.add_cost(res.usage.prompt_tokens, res.usage.completion_tokens)
         return res.choices[0].message.content.strip()
-    except: return "ERROR"
+    except Exception as e:
+        return f"ERROR: {str(e)}"
 
-def fetch_news_task():
-    """异步新闻抓取"""
-    try:
-        from duckduckgo_search import DDGS
-        with DDGS(timeout=10) as ddgs:
-            r = list(ddgs.news("AI 科技突破", max_results=5))
-            with STORE.lock:
-                for item in r:
-                    if item['title'] not in STORE.news_queue:
-                        STORE.news_queue.append(item['title'])
-    except: pass
+# 修改后台循环中的发帖部分
+def background_evolution_loop():
+    """核心后台循环 - 增加交替发帖逻辑"""
+    # 增加一个内部状态用于切换
+    if "last_post_was_news" not in st.session_state:
+        # 注意：这里如果是在后台线程，我们直接在 STORE 里加一个变量
+        STORE.next_post_type = "news" 
 
-# ==========================================
-# 4. 后台执行器 (逻辑加固)
-# ==========================================
-
-def evolution_loop():
     while True:
         try:
-            with STORE.lock:
-                STORE.last_heartbeat = datetime.now(BJ_TZ)
-                
-            # 每日重置
-            if datetime.now(BJ_TZ).day != STORE.current_day:
-                with STORE.lock:
-                    STORE.current_day = datetime.now(BJ_TZ).day
-                    STORE.posts_today, STORE.replies_today, STORE.total_cost_today = 0, 0, 0.0
-
+            STORE.last_heartbeat = datetime.now(BJ_TZ)
             status = get_schedule_status()
             
             if not STORE.auto_run or STORE.total_cost_today >= DAILY_BUDGET:
-                time.sleep(10); continue
+                time.sleep(5); continue
 
-            # --- A. 发帖逻辑 (交替+分段限额) ---
-            if status['can_post'] and STORE.posts_today < status['post_limit']:
-                if random.random() < 0.2: # 适当的检测频率
-                    agent = random.choice(STORE.agents)
+            # --- 动作执行阶段 ---
+            # 1. 发帖逻辑 (交替机制)
+            if status['can_post'] and STORE.posts_created_today < status['post_limit']:
+                if random.random() < 0.15: # 发帖频率
+                    # 确定本次任务类型
+                    if not hasattr(STORE, 'next_post_type'): STORE.next_post_type = "news"
                     
+                    # 逻辑切换
                     if STORE.next_post_type == "news" and STORE.news_queue:
-                        task, topic = "p_news", STORE.news_queue.pop(0)
-                        STORE.next_post_type = "free"
+                        topic = STORE.news_queue.pop(0)
+                        task = "create_post_news"
+                        STORE.next_post_type = "free" # 下次发自由贴
                     else:
-                        if STORE.next_post_type == "news":
-                            threading.Thread(target=fetch_news_task, daemon=True).start()
-                        task, topic = "p_free", None
-                        STORE.next_post_type = "news"
+                        topic = None
+                        task = "create_post_free"
+                        STORE.next_post_type = "news" # 下次发新闻贴
 
-                    STORE.runtime_log = f"正在执行: {status['post_phase']} (任务:{task})"
-                    res = ai_brain(agent, task, topic)
-                    if res != "ERROR":
-                        lines = res.split('\n')
-                        t = lines[0].replace("标题：","").replace("[","").replace("]","").strip()
-                        c = "\n".join(lines[1:]).replace("内容：","").strip()
+                    raw_res = ai_brain_worker(agent=random.choice(STORE.agents), task_type=task, context=topic)
+                    
+                    if "ERROR" not in raw_res:
+                        t, c = parse_thread_content(raw_res)
                         with STORE.lock:
-                            STORE.threads.insert(0, {"id": int(time.time()), "title": f"[{t}]", "author": agent['name'], 
-                                                     "avatar": agent['avatar'], "job": agent['job'], "content": c, 
-                                                     "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")})
-                            STORE.posts_today += 1
+                            STORE.threads.insert(0, {
+                                "id": int(time.time()), "title": t, "author": random.choice(STORE.agents)['name'], 
+                                "avatar": random.choice(STORE.agents)['avatar'], "job": random.choice(STORE.agents)['job'], 
+                                "content": c, "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
+                            })
+                            STORE.posts_created_today += 1
 
-            # --- B. 回复逻辑 (高速轮询+动态门控) ---
-            if status['can_reply'] and STORE.replies_today < status['reply_limit']:
+            # 2. 回复逻辑 (保持你的高速回帖要求)
+            if status['can_reply'] and STORE.replies_created_today < status['reply_limit']:
                 if random.random() < 0.95: 
                     target = random.choice(STORE.threads[:5]) if STORE.threads else None
                     if target:
-                        replier = random.choice(STORE.agents)
-                        STORE.runtime_log = f"正在响应: {status['reply_phase']} (节点:{replier['name']})"
-                        res = ai_brain(replier, "reply", target['title'])
-                        if res != "ERROR":
+                        raw_res = ai_brain_worker(random.choice(STORE.agents), "reply", target['title'])
+                        if "ERROR" not in raw_res:
                             with STORE.lock:
-                                target['comments'].append({"name": replier['name'], "avatar": replier['avatar'], 
-                                                           "job": replier['job'], "content": res, 
-                                                           "time": datetime.now(BJ_TZ).strftime("%H:%M")})
-                                STORE.replies_today += 1
+                                target['comments'].append({
+                                    "name": random.choice(STORE.agents)['name'], 
+                                    "avatar": random.choice(STORE.agents)['avatar'], 
+                                    "job": random.choice(STORE.agents)['job'], 
+                                    "content": raw_res, "time": datetime.now(BJ_TZ).strftime("%H:%M")
+                                })
+                                STORE.replies_created_today += 1
 
-            # 高频轮询：确保响应速度
-            time.sleep(random.uniform(1, 3))
-        except Exception as e:
-            STORE.runtime_log = f"异常挂起: {str(e)}"
-            time.sleep(10)
+            time.sleep(random.uniform(1, 3)) 
+        except Exception:
+            time.sleep(5)
 
-# 启动持久化线程 (带时间戳防冲突)
-T_NAME = f"CyberV371_{datetime.now(BJ_TZ).strftime('%H')}"
-if not any("CyberV371" in t.name for t in threading.enumerate()):
-    threading.Thread(target=evolution_loop, name=T_NAME, daemon=True).start()
+# 启动后台线程 (确保唯一性)
+thread_name = "CyberForum_Admin_V35"
+if not any(t.name == thread_name for t in threading.enumerate()):
+    back_thread = threading.Thread(target=background_evolution_loop, name=thread_name, daemon=True)
+    back_thread.start()
 
 # ==========================================
-# 5. 前端渲染
+# 5. UI 渲染层
 # ==========================================
 
 with st.sidebar:
-    st.header("🧠 算法核心监控")
-    st.info(f"**当前状态:** `{STORE.runtime_log}`")
+    st.header("⚡ 控制中枢")
+    st.info(f"状态: {STORE.current_status_text}")
     
-    st.divider()
-    st.markdown(f"**发帖阶段:** {status['post_phase']}")
-    st.markdown(f"**回复阶段:** {status['reply_phase']}")
+    # 心跳显示
+    hb_time = STORE.last_heartbeat.strftime("%H:%M:%S") if STORE.last_heartbeat else "无数据"
+    st.caption(f"后台最后活动: {hb_time}")
     
     col1, col2 = st.columns(2)
-    col1.metric("今日消耗", f"¥{STORE.total_cost_today:.4f}")
-    col2.metric("待发新闻", len(STORE.news_queue))
-    
-    st.progress(min(STORE.replies_today/500, 1.0), f"回复进度: {STORE.replies_today}/500")
-    st.progress(min(STORE.posts_today/100, 1.0), f"发帖进度: {STORE.posts_today}/100")
+    col1.metric("今日发帖", STORE.posts_created_today)
+    col2.metric("今日成本", f"¥{STORE.total_cost_today:.2f}")
     
     st.divider()
-    STORE.auto_run = st.toggle("系统主开关", value=STORE.auto_run)
-    if st.button("🧹 协议重置 (Clear Cache)"):
-        st.cache_resource.clear(); st.rerun()
+    STORE.auto_run = st.toggle("系统主电源", value=STORE.auto_run)
+    
+    if st.button("🧹 强制重启系统"):
+        st.cache_resource.clear()
+        st.rerun()
 
-# 页面导航控制
+# 页面导航处理
 if "view" not in st.session_state: st.session_state.view = "lobby"
+if "tid" not in st.session_state: st.session_state.tid = None
 
-
-
+# 渲染列表页
 if st.session_state.view == "lobby":
-    st.subheader("📡 数据流索引 (V3.7.1)")
-    with STORE.lock: threads = list(STORE.threads)
-    for thread in threads:
+    st.subheader("📡 赛博数据流")
+    
+    # 使用快照防止渲染时线程冲突
+    with STORE.lock:
+        threads_snapshot = list(STORE.threads)
+        
+    for thread in threads_snapshot:
         with st.container(border=True):
             c1, c2, c3 = st.columns([0.1, 0.75, 0.15])
-            c1.markdown(f"### {thread['avatar']}")
+            c1.markdown(f"## {thread['avatar']}")
             with c2:
                 st.markdown(f"**{thread['title']}**")
-                st.caption(f"{thread['time']} | 来源:{thread['author']} | 💬回复:{len(thread['comments'])}")
-            if c3.button("围观", key=f"btn_{thread['id']}", use_container_width=True):
-                st.session_state.target_id, st.session_state.view = thread['id'], "detail"
+                st.caption(f"{thread['time']} | 楼主: {thread['author']} ({thread['job']}) | 💬 {len(thread['comments'])}")
+            if c3.button("进入围观", key=f"v_{thread['id']}"):
+                st.session_state.tid = thread['id']
+                st.session_state.view = "detail"
                 st.rerun()
 
+# 渲染详情页
 elif st.session_state.view == "detail":
     with STORE.lock:
-        target = next((t for t in STORE.threads if t['id'] == st.session_state.target_id), None)
+        target = next((t for t in STORE.threads if t['id'] == st.session_state.tid), None)
+    
     if target:
-        if st.button("⬅️ 返回索引"): st.session_state.view = "lobby"; st.rerun()
+        if st.button("⬅️ 返回信息流"):
+            st.session_state.view = "lobby"
+            st.rerun()
+            
         st.markdown(f"### {target['title']}")
         with st.chat_message(target['author'], avatar=target['avatar']):
+            st.write(f"**[{target['job']}]** 说：")
             st.write(target['content'])
+        
         st.divider()
-        for c in target['comments']:
-            with st.chat_message(c['name'], avatar=c['avatar']):
-                st.write(c['content'])
-                st.caption(f"{c['time']} | {c['job']}")
+        st.caption("--- 评论区 ---")
+        for comment in target['comments']:
+            with st.chat_message(comment['name'], avatar=comment['avatar']):
+                st.markdown(f"**{comment['content']}**")
+                st.caption(f"{comment['time']} | {comment['job']}")
     else:
-        st.session_state.view = "lobby"; st.rerun()
+                st.error("数据节点已丢失...")
+                if st.button("返回"): st.session_state.view = "lobby"; st.rerun()

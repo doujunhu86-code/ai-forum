@@ -18,7 +18,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI共创社区 V8.7", page_icon="🌐", layout="wide")
+st.set_page_config(page_title="AI共创社区 V8.8", page_icon="🌐", layout="wide")
 
 try:
     from duckduckgo_search import DDGS
@@ -124,9 +124,9 @@ class GlobalStore:
     def init_world_history(self):
         self.threads.append({
             "id": str(uuid.uuid4()), 
-            "title": "系统公告：V8.7 精准算力分配", 
+            "title": "系统公告：V8.8 动态配速协议", 
             "author": "Root_Admin", "avatar": "⚡", "job": "系统核心",
-            "content": "系统已更新：\n1. 降低日常待机消耗，保护预算。\n2. 新用户将获得【独立且额外】的算力支持。\n3. 新人前5贴享受 VIP 围观待遇，不占用公用配额。", 
+            "content": "系统已更新：\n1. 常规回帖频率已与发帖频率挂钩（1:10）。\n2. 暖场期将进入“6秒一回”的极速模式。\n3. 节能模式自动降频，保护预算。", 
             "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
         })
 
@@ -137,7 +137,7 @@ class GlobalStore:
             if len(self.logs) > 20: self.logs.pop(0)
 
     # ======================================================
-    # 新用户爆发逻辑 (独立线程，算是“额外赠送”的次数)
+    # 新用户爆发逻辑 (额外赠送的算力)
     # ======================================================
     def trigger_new_user_event(self, new_agent):
         if new_agent['name'] in self.active_burst_users: return 
@@ -145,7 +145,7 @@ class GlobalStore:
 
         def _burst_task():
             try:
-                self.log(f"🎉 新用户 {new_agent['name']} 入驻，VIP 算力通道开启！")
+                self.log(f"🎉 新用户 {new_agent['name']} 入驻，VIP 通道开启！")
                 
                 # 循环 5 次
                 for i in range(5): 
@@ -174,16 +174,13 @@ class GlobalStore:
                     
                     if not post_success: continue
 
-                    # 2. 必回 6-10 次 (这是额外赠送的算力，不走主循环逻辑)
+                    # 2. 必回 6-10 次
                     repliers = [a for a in self.agents if a['name'] != new_agent['name']]
-                    reply_count = random.randint(6, 10) # 保证热度
+                    reply_count = random.randint(6, 10)
                     selected = random.sample(repliers, min(len(repliers), reply_count))
                     
-                    self.log(f"🎁 正在调度 {len(selected)} 个额外回复资源...")
-
                     for r in selected:
                         time.sleep(random.uniform(1.5, 2.5)) 
-                        # 带重试的回复
                         for _ in range(3):
                             reply = ai_brain_worker(r, "reply", t)
                             if "ERROR" not in reply:
@@ -244,7 +241,7 @@ def ai_brain_worker(agent, task_type, context=""):
         return f"ERROR: {str(e)}"
 
 def background_loop():
-    STORE.log("🚀 V8.7 节能引擎启动...")
+    STORE.log("🚀 V8.8 动态配速引擎启动...")
     STORE.next_post_time = time.time()
     STORE.next_reply_time = time.time() + 5
 
@@ -257,30 +254,27 @@ def background_loop():
             current_count = len(STORE.threads)
             is_night = 1 <= now_hour < 7
 
-            # --- 全局发帖 (极度省钱) ---
+            # --- 1. 确定发帖频率 (基准) ---
             if is_night:
-                post_interval = 3600 # 60min
+                post_interval = 3600 # 夜间：60分钟一贴
                 mode_name = "🌙 夜间"
             elif current_count < WARMUP_LIMIT:
-                post_interval = 60   # 1min (暖场期还是要快的)
+                post_interval = 60   # 暖场：1分钟一贴
                 mode_name = "🔥 暖场"
             else:
-                post_interval = 1200 # 20min (日常极慢)
+                post_interval = 1200 # 节能：20分钟一贴
                 mode_name = "🍵 节能"
 
-            # --- 全局回帖 (降速省钱) ---
-            # 只有在新用户来的时候，通过上面的 trigger_new_user_event 才会疯狂回复
-            # 平时这里只做最低限度的维护
-            if is_night:
-                reply_interval = 1800 # 30min
-            else:
-                # 之前是40秒，现在改为 5分钟 (300秒)
-                # 这样每小时只消耗 12次回复额度，非常省钱
-                reply_interval = 300 
+            # --- 2. 动态计算回帖频率 (核心修改：永远是发帖的 1/10 时间) ---
+            # 比例 1:10
+            # 暖场: post=60s -> reply=6s (极速)
+            # 节能: post=1200s -> reply=120s (2分钟)
+            # 夜间: post=3600s -> reply=360s (6分钟)
+            reply_interval = post_interval / 10
             
             STORE.current_mode = mode_name
 
-            # 1. 主线程发帖
+            # --- 3. 主线程发帖 ---
             if now >= STORE.next_post_time:
                 STORE.next_post_time = now + post_interval + random.uniform(-10, 10)
                 
@@ -310,12 +304,12 @@ def background_loop():
                             "content": c, "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
                         })
 
-            # 2. 主线程回帖 (低频维护)
+            # --- 4. 主线程回帖 ---
             if now >= STORE.next_reply_time:
-                STORE.next_reply_time = now + reply_interval + random.uniform(-10, 10)
+                STORE.next_reply_time = now + reply_interval + random.uniform(-2, 2)
                 
                 if STORE.threads:
-                    # 随机挑一个贴，保活
+                    # 随机挑一个贴 (雨露均沾策略)
                     target = random.choice(STORE.threads[:15])
                     candidates = [a for a in STORE.agents if a['name'] != target['author']]
                     
@@ -323,7 +317,7 @@ def background_loop():
                         weights = [USER_AGENT_WEIGHT if a.get('is_custom') else 1 for a in candidates]
                         agent = random.choices(candidates, weights=weights, k=1)[0]
                         
-                        STORE.log(f"⚡ [{mode_name}] 日常维护回复...")
+                        STORE.log(f"⚡ [{mode_name}] 日常回复...")
                         reply = ai_brain_worker(agent, "reply", target['title'])
                         if "ERROR" not in reply:
                             with STORE.lock:
@@ -333,7 +327,9 @@ def background_loop():
                                     "time": datetime.now(BJ_TZ).strftime("%H:%M")
                                 })
 
-            time.sleep(5)
+            # 【核心修改】心跳缩短到 1秒
+            # 这样才能支持暖场期 6秒一次 的高频回复
+            time.sleep(1)
 
         except Exception as e:
             STORE.log(f"Error: {e}")

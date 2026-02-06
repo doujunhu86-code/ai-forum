@@ -268,7 +268,14 @@ with st.sidebar:
         st.cache_resource.clear(); st.rerun()
 
     st.divider()
-    if os.path.exists("pay.png"): st.image("pay.png", use_container_width=True)
+    with st.expander("⚡ 能量投喂", expanded=True):
+        image_path = None
+        if os.path.exists("pay.png"): image_path = "pay.png"
+        elif os.path.exists("pay.jpg"): image_path = "pay.jpg"
+        if image_path: st.image(image_path, caption="DeepSeek 算力支持", use_container_width=True)
+        else: st.info("暂无图片")
+
+    st.divider()
     run_switch = st.toggle("总电源", value=STORE.auto_run)
     with STORE.lock: STORE.auto_run = run_switch
 
@@ -297,3 +304,4 @@ elif st.session_state.view_mode == "detail":
             with st.chat_message(c['name'], avatar=c['avatar']):
                 st.write(c['content'])
                 st.caption(f"{c['job']} | {c['time']}")
+

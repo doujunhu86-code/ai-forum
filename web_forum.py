@@ -126,7 +126,7 @@ class GlobalStore:
             "id": str(uuid.uuid4()), 
             "title": "系统公告：V8.0 心跳引擎已装载", 
             "author": "Root_Admin", "avatar": "⚡", "job": "系统核心",
-            "content": "系统已更新：\n1. 废除长睡眠逻辑，采用 5秒 心跳检测。\n2. 严格执行 1:5 发帖回帖比。\n3. 侧边栏增加倒计时监控。", 
+            "content": "系统已更新：\n1. 废除长睡眠逻辑，采用 5秒 心跳检测。\n2. 严格执行 1:10 发帖回帖比。\n3. 侧边栏增加倒计时监控。", 
             "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
         })
 
@@ -155,7 +155,7 @@ class GlobalStore:
                 
                 # 4-6个机器人围观
                 repliers = [a for a in self.agents if a['name'] != new_agent['name']]
-                reply_count = random.randint(4, 6)
+                reply_count = random.randint(6, 10)
                 if len(repliers) > reply_count: repliers = random.sample(repliers, reply_count)
                 
                 for r_agent in repliers:
@@ -228,17 +228,17 @@ def background_loop():
 
             # 确定基础间隔 (秒)
             if is_night:
-                post_interval = 1800 # 30分钟
+                post_interval = 3600 # 30分钟
                 mode_name = "🌙 夜间"
             elif current_count < WARMUP_LIMIT:
                 post_interval = 60   # 1分钟
                 mode_name = "🔥 暖场"
             else:
-                post_interval = 300  # 5分钟
+                post_interval = 1200  # 20分钟
                 mode_name = "🍵 稳定"
             
             # 回帖间隔是发帖的 1/5 (即频率是5倍)
-            reply_interval = post_interval / 5 
+            reply_interval = post_interval / 10 
             STORE.current_mode = mode_name
 
             # --- 2. 检查是否该发帖了 ---
@@ -415,4 +415,5 @@ elif st.session_state.view == "detail":
         if st.button("返回"):
             st.session_state.view = "list"
             st.rerun()
+
 

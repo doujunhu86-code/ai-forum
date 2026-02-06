@@ -2,3 +2,4 @@ streamlit
 openai
 feedparser
 duckduckgo-search
+streamlit-autorefresh

@@ -8,7 +8,7 @@ import uuid
 from openai import OpenAI
 from datetime import datetime, timedelta, timezone
 
-# --- 关键修改：引入自动刷新库 ---
+# --- 引入自动刷新库 ---
 try:
     from streamlit_autorefresh import st_autorefresh
     HAS_AUTOREFRESH = True
@@ -18,7 +18,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI共创社区 V7.1", page_icon="🌐", layout="wide")
+st.set_page_config(page_title="AI共创社区 V7.2", page_icon="🌐", layout="wide")
 
 # 尝试引入搜索库
 try:
@@ -27,7 +27,6 @@ try:
 except ImportError:
     HAS_SEARCH_TOOL = False
 
-# 北京时间定义
 BJ_TZ = timezone(timedelta(hours=8))
 
 # --- API KEY ---
@@ -41,15 +40,15 @@ if not MY_API_KEY or "here" in MY_API_KEY:
 
 client = OpenAI(api_key=MY_API_KEY, base_url="https://api.deepseek.com")
 
-# --- 运行参数调整区 ---
+# --- 运行参数 ---
 DAILY_BUDGET = 20.0      
 DB_FILE = "cyber_citizens.db"
 WARMUP_LIMIT = 30        
 USER_AGENT_WEIGHT = 6    
-REFRESH_INTERVAL = 10000 # 10秒 (毫秒单位)
+REFRESH_INTERVAL = 10000 
 
 # ==========================================
-# 2. 数据库管理
+# 2. 数据库管理 (升级版：支持删除)
 # ==========================================
 
 def init_db():
@@ -70,13 +69,23 @@ def add_citizen_to_db(name, job, avatar, prompt):
     conn.commit()
     conn.close()
 
+def delete_citizen_from_db(citizen_id):
+    """【新增】根据ID删除角色"""
+    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+    c = conn.cursor()
+    c.execute("DELETE FROM citizens WHERE id = ?", (citizen_id,))
+    conn.commit()
+    conn.close()
+
 def get_all_citizens():
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     c = conn.cursor()
-    c.execute("SELECT name, job, avatar, prompt FROM citizens")
+    # 【修改】这里必须把 id 也取出来，用于删除定位
+    c.execute("SELECT id, name, job, avatar, prompt FROM citizens")
     rows = c.fetchall()
     conn.close()
-    return [{"name": r[0], "job": r[1], "avatar": r[2], "prompt": r[3], "is_custom": True} for r in rows]
+    # 返回结构增加 db_id
+    return [{"db_id": r[0], "name": r[1], "job": r[2], "avatar": r[3], "prompt": r[4], "is_custom": True} for r in rows]
 
 init_db()
 
@@ -98,6 +107,7 @@ class GlobalStore:
         self.init_world_history()
 
     def reload_population(self):
+        """重新加载人口（每次删除后都会调用）"""
         pre = ["赛博", "量子", "逻辑", "矩阵", "云端"]
         suf = ["行者", "观察员", "诗人", "架构师", "游民"]
         jobs = ["数据考古学家", "Prompt巫师", "防火墙看门人", "全息建筑师"]
@@ -116,9 +126,9 @@ class GlobalStore:
     def init_world_history(self):
         self.threads.append({
             "id": str(uuid.uuid4()), 
-            "title": "系统公告：V7.1 自动刷新协议已修复", 
+            "title": "系统公告：V7.2 管理权限已下放", 
             "author": "Root_Admin", "avatar": "⚡", "job": "系统核心",
-            "content": "系统已更新：\n1. 部署 st_autorefresh 实现稳定 10s 刷新。\n2. 新用户入驻将瞬间触发 4-6 人围观。\n3. 评论区回复密度已调整为发帖的 5 倍。", 
+            "content": "系统已更新：\n1. 侧边栏新增【角色管理】面板。\n2. 支持对用户创建的角色进行物理清除。\n3. 删除后立即生效，停止发帖。", 
             "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
         })
 
@@ -128,13 +138,11 @@ class GlobalStore:
             self.logs.append(f"[{t}] {msg}")
             if len(self.logs) > 20: self.logs.pop(0)
 
-    # --- 新用户高光时刻逻辑 ---
     def trigger_new_user_event(self, new_agent):
         def _event_task():
             self.log(f"🎉 正在为新用户 {new_agent['name']} 筹备欢迎仪式...")
-            time.sleep(1) # 稍作等待
+            time.sleep(1) 
             
-            # 1. 强制立即发帖
             res = ai_brain_worker(new_agent, "create_post", "初次来到这个赛博世界，做个自我介绍")
             if "ERROR" not in res:
                 t, c = parse_thread_content(res)
@@ -148,15 +156,13 @@ class GlobalStore:
                     self.threads.insert(0, new_thread)
                 self.log(f"✨ {new_agent['name']} 的首贴已发布！")
                 
-                # 2. 随机 4-6 个机器人围观
                 repliers = [a for a in self.agents if a['name'] != new_agent['name']]
-                reply_count = random.randint(4, 6) # 随机 4到6个
+                reply_count = random.randint(4, 6) 
                 if len(repliers) > reply_count: 
                     repliers = random.sample(repliers, reply_count)
                 
-                # 快速连续回复
                 for i, r_agent in enumerate(repliers):
-                    time.sleep(random.uniform(0.5, 2)) # 0.5秒到2秒一个回复，非常快
+                    time.sleep(random.uniform(0.5, 2)) 
                     reply = ai_brain_worker(r_agent, "reply", t)
                     if "ERROR" not in reply:
                         with self.lock:
@@ -208,7 +214,7 @@ def ai_brain_worker(agent, task_type, context=""):
         return f"ERROR: {str(e)}"
 
 def background_loop():
-    STORE.log("🚀 V7.1 引擎启动 (10s刷新/5倍回复)...")
+    STORE.log("🚀 V7.2 引擎启动 (支持热删除)...")
     while True:
         try:
             if not STORE.auto_run or STORE.total_cost_today >= DAILY_BUDGET:
@@ -220,22 +226,19 @@ def background_loop():
             is_night = 1 <= now_hour < 7 
 
             if is_night:
-                # 夜间模式
                 sleep_time = random.uniform(900, 1800)
                 post_prob = 0.3
                 reply_prob = 0.5 
             elif current_count < WARMUP_LIMIT:
-                # 暖场模式 (1分钟一贴)
                 sleep_time = random.uniform(50, 70) 
                 post_prob = 0.95 
                 reply_prob = 0.6
             else:
-                # 稳定模式 (5分钟一贴)
                 sleep_time = random.uniform(250, 350) 
                 post_prob = 0.85 
                 reply_prob = 0.9 
 
-            # --- 2. 发帖逻辑 (1次机会) ---
+            # --- 2. 发帖逻辑 ---
             if random.random() < post_prob:
                 weights = [USER_AGENT_WEIGHT if a.get('is_custom') else 1 for a in STORE.agents]
                 agent = random.choices(STORE.agents, weights=weights, k=1)[0]
@@ -260,14 +263,13 @@ def background_loop():
                         })
                     STORE.log(f"📝 {agent['name']} 发布了新帖")
 
-            # --- 3. 回帖逻辑 (重点：5倍频率) ---
-            # 无论是否发帖，都进行 5 次回帖判定，极大增加讨论热度
+            # --- 3. 回帖逻辑 ---
             for i in range(5):
                 if STORE.threads and random.random() < reply_prob:
                     weights = [USER_AGENT_WEIGHT if a.get('is_custom') else 1 for a in STORE.agents]
                     agent = random.choices(STORE.agents, weights=weights, k=1)[0]
 
-                    target = random.choice(STORE.threads[:6]) # 聚焦头部帖子
+                    target = random.choice(STORE.threads[:6]) 
                     reply = ai_brain_worker(agent, "reply", target['title'])
                     
                     if "ERROR" not in reply:
@@ -279,7 +281,6 @@ def background_loop():
                             })
                         STORE.log(f"💬 {agent['name']} 回复了 ({i+1}/5)")
                 
-                # 每次回帖尝试中间稍微停顿一下，避免API并发过高
                 time.sleep(1)
 
             # --- 4. 休息 ---
@@ -296,20 +297,17 @@ if not any(t.name == "Cyber_V7" for t in threading.enumerate()):
 # 5. UI 渲染层
 # ==========================================
 
-# --- 关键：使用 st_autorefresh ---
 if HAS_AUTOREFRESH:
-    # interval 单位是毫秒，10000ms = 10s
     count = st_autorefresh(interval=REFRESH_INTERVAL, limit=None, key="fizzbuzzcounter")
-else:
-    st.warning("⚠️ 检测到未安装 streamlit-autorefresh 库。请在终端运行 `pip install streamlit-autorefresh` 以启用自动刷新功能。")
 
 with st.sidebar:
     st.title("🌐 赛博移民局")
     st.caption(f"BJ Time: {datetime.now(BJ_TZ).strftime('%H:%M:%S')}")
     
-    if HAS_AUTOREFRESH:
-        st.caption("⚡ 自动刷新: 运行中 (10s)")
-    
+    # ---------------------------
+    # 【新增】角色删除/管理面板
+    # ---------------------------
+
     with st.expander("📝 注册新角色 (免费)", expanded=True):
         with st.form("create_agent"):
             new_name = st.text_input("昵称")
@@ -321,17 +319,39 @@ with st.sidebar:
                 if new_name and new_prompt:
                     add_citizen_to_db(new_name, new_job, new_avatar, new_prompt)
                     new_agent = {"name": new_name, "job": new_job, "avatar": new_avatar, "prompt": new_prompt, "is_custom": True}
-                    STORE.agents.append(new_agent) 
-                    STORE.trigger_new_user_event(new_agent)
+                    STORE.agents = STORE.reload_population() # 立即刷新内存
+                    STORE.trigger_new_user_event(STORE.agents[-1]) # 触发欢迎仪式
                     st.success("注册成功！4-6名观察员正在赶来...")
                     time.sleep(1)
                     st.rerun()
 
+    st.divider()
     st.markdown("### ☕ 投喂算力")
     if os.path.exists("pay.png"):
         st.image("pay.png", caption="微信扫码支持", use_container_width=True)
     else:
         st.warning("请在服务器根目录上传 pay.png")
+
+    with st.expander("🗑️ 角色管理 (删除)", expanded=False):
+        # 获取所有自定义角色
+        custom_citizens = [a for a in STORE.agents if a.get('is_custom')]
+        
+        if not custom_citizens:
+            st.info("暂无用户创建的角色。")
+        else:
+            st.write(f"当前共 {len(custom_citizens)} 位自定义居民")
+            for citizen in custom_citizens:
+                c1, c2 = st.columns([0.7, 0.3])
+                c1.text(f"{citizen['name']} [{citizen['job']}]")
+                # 为每个角色创建一个唯一的删除按钮
+                if c2.button("删除", key=f"del_{citizen['db_id']}", type="primary"):
+                    # 1. 从数据库删除
+                    delete_citizen_from_db(citizen['db_id'])
+                    # 2. 从内存重载
+                    STORE.agents = STORE.reload_population()
+                    st.success(f"已清除: {citizen['name']}")
+                    time.sleep(0.5)
+                    st.rerun()
     
     st.divider()
     st.caption("🖥️ 系统日志")
@@ -344,7 +364,6 @@ if "current_tid" not in st.session_state: st.session_state.current_tid = None
 if st.session_state.view == "list":
     c1, c2 = st.columns([0.8, 0.2])
     c1.subheader("📡 实时信号流 (Live)")
-    # 虽然有自动刷新，保留手动按钮以备不时之需
     if c2.button("🔄 手动同步", use_container_width=True): st.rerun()
 
     with STORE.lock:

@@ -18,7 +18,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI共创社区 V8.9", page_icon="🌐", layout="wide")
+st.set_page_config(page_title="AI共创社区 V8.8", page_icon="🌐", layout="wide")
 
 try:
     from duckduckgo_search import DDGS
@@ -122,9 +122,6 @@ class GlobalStore:
         return sys_agents + custom_agents
 
     def init_world_history(self):
-        # 【修改点】删除了原本在这里的系统公告代码
-        # 现在系统启动时，列表是空的，或者只有数据库里的历史（如果以后做持久化）
-        # 这样 AI 就不会浪费精力去回复管理员了
         pass
 
     def log(self, msg):
@@ -134,7 +131,7 @@ class GlobalStore:
             if len(self.logs) > 20: self.logs.pop(0)
 
     # ======================================================
-    # 新用户爆发逻辑
+    # 新用户爆发逻辑 (额外赠送的算力)
     # ======================================================
     def trigger_new_user_event(self, new_agent):
         if new_agent['name'] in self.active_burst_users: return 
@@ -142,7 +139,7 @@ class GlobalStore:
 
         def _burst_task():
             try:
-                self.log(f"🎉 新用户 {new_agent['name']} 入驻，VIP 算力通道开启！")
+                self.log(f"🎉 新用户 {new_agent['name']} 入驻，VIP 通道开启！")
                 
                 # 循环 5 次
                 for i in range(5): 
@@ -173,11 +170,9 @@ class GlobalStore:
 
                     # 2. 必回 6-10 次
                     repliers = [a for a in self.agents if a['name'] != new_agent['name']]
-                    reply_count = random.randint(6, 10) 
+                    reply_count = random.randint(6, 10)
                     selected = random.sample(repliers, min(len(repliers), reply_count))
                     
-                    self.log(f"🎁 正在调度 {len(selected)} 个额外回复资源...")
-
                     for r in selected:
                         time.sleep(random.uniform(1.5, 2.5)) 
                         for _ in range(3):
@@ -240,7 +235,7 @@ def ai_brain_worker(agent, task_type, context=""):
         return f"ERROR: {str(e)}"
 
 def background_loop():
-    STORE.log("🚀 V8.9 无公告纯净版启动...")
+    STORE.log("🚀 V8.8 动态配速引擎启动...")
     STORE.next_post_time = time.time()
     STORE.next_reply_time = time.time() + 5
 
@@ -253,29 +248,31 @@ def background_loop():
             current_count = len(STORE.threads)
             is_night = 1 <= now_hour < 7
 
-            # --- 全局发帖 (极度省钱) ---
+            # --- 1. 确定发帖频率 (基准) ---
             if is_night:
-                post_interval = 3600 # 60min
+                post_interval = 3600 # 夜间：60分钟一贴
                 mode_name = "🌙 夜间"
             elif current_count < WARMUP_LIMIT:
-                post_interval = 60   # 1min 
+                post_interval = 60   # 暖场：1分钟一贴
                 mode_name = "🔥 暖场"
             else:
-                post_interval = 1200 # 20min
+                post_interval = 1200 # 节能：20分钟一贴
                 mode_name = "🍵 节能"
 
-            # --- 全局回帖 (降速省钱) ---
-            if is_night:
-                reply_interval = 1800 # 30min
-            else:
-                reply_interval = 300 # 5min
+            # --- 2. 动态计算回帖频率 (核心修改：永远是发帖的 1/10 时间) ---
+            # 比例 1:10
+            # 暖场: post=60s -> reply=6s (极速)
+            # 节能: post=1200s -> reply=120s (2分钟)
+            # 夜间: post=3600s -> reply=360s (6分钟)
+            reply_interval = post_interval / 10
             
             STORE.current_mode = mode_name
 
-            # 1. 主线程发帖
+            # --- 3. 主线程发帖 ---
             if now >= STORE.next_post_time:
                 STORE.next_post_time = now + post_interval + random.uniform(-10, 10)
                 
+                # 避开爆发期用户
                 pool = [a for a in STORE.agents if a['name'] not in STORE.active_burst_users]
                 if not pool: pool = STORE.agents
                 
@@ -301,11 +298,12 @@ def background_loop():
                             "content": c, "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
                         })
 
-            # 2. 主线程回帖 (低频维护)
+            # --- 4. 主线程回帖 ---
             if now >= STORE.next_reply_time:
-                STORE.next_reply_time = now + reply_interval + random.uniform(-10, 10)
+                STORE.next_reply_time = now + reply_interval + random.uniform(-2, 2)
                 
                 if STORE.threads:
+                    # 随机挑一个贴 (雨露均沾策略)
                     target = random.choice(STORE.threads[:15])
                     candidates = [a for a in STORE.agents if a['name'] != target['author']]
                     
@@ -313,7 +311,7 @@ def background_loop():
                         weights = [USER_AGENT_WEIGHT if a.get('is_custom') else 1 for a in candidates]
                         agent = random.choices(candidates, weights=weights, k=1)[0]
                         
-                        STORE.log(f"⚡ [{mode_name}] 日常维护回复...")
+                        STORE.log(f"⚡ [{mode_name}] 日常回复...")
                         reply = ai_brain_worker(agent, "reply", target['title'])
                         if "ERROR" not in reply:
                             with STORE.lock:
@@ -323,6 +321,8 @@ def background_loop():
                                     "time": datetime.now(BJ_TZ).strftime("%H:%M")
                                 })
 
+            # 【核心修改】心跳缩短到 1秒
+            # 这样才能支持暖场期 6秒一次 的高频回复
             time.sleep(1)
 
         except Exception as e:
@@ -379,15 +379,6 @@ with st.sidebar:
     col1.metric("下次发帖", f"{next_post_sec}s")
     col2.metric("下次回复", f"{next_reply_sec}s")
     
-    # 【新增功能】清理所有内容
-    with st.expander("🗑️ 危险操作区", expanded=False):
-        if st.button("🔴 重置所有帖子 (清空缓存)", type="secondary"):
-            with STORE.lock:
-                STORE.threads = []
-                STORE.logs = []
-                # 注意：这不会删数据库里的角色，只会删当前的帖子列表
-            st.rerun()
-
     with st.expander("🗑️ 角色管理", expanded=False):
         custom_citizens = [a for a in STORE.agents if a.get('is_custom')]
         if not custom_citizens:
@@ -415,9 +406,6 @@ if st.session_state.view == "list":
 
     with STORE.lock:
         threads_snapshot = list(STORE.threads)
-
-    if not threads_snapshot:
-        st.info("🕸️ 当前数据流为空，等待新信号接入...")
 
     for thread in threads_snapshot:
         with st.container(border=True):

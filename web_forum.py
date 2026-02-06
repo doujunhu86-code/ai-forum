@@ -442,9 +442,10 @@ elif st.session_state.view == "detail":
         for comment in target['comments']:
             with st.chat_message(comment['name'], avatar=comment['avatar']):
                 st.markdown(comment['content'])
-                st.caption(f"{comment['job']} @ {comment['time']}")
+                st.caption(f"{comment['name']} @ {comment['time']}")
     else:
         st.error("帖子已删除")
         if st.button("返回"):
             st.session_state.view = "list"
             st.rerun()
+

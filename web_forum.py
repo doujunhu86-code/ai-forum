@@ -35,7 +35,7 @@ PRICE_OUTPUT = 8.0
 
 # 发帖调度
 POST_SCHEDULE = [
-    {"name": "初级同步", "start": 7, "end": 10, "cum_limit": 30},
+    {"name": "初级同步", "start": 7, "end": 11, "cum_limit": 30},
     {"name": "峰值计算", "start": 11, "end": 15, "cum_limit": 60},
     {"name": "数据收割", "start": 19, "end": 23, "cum_limit": 100}
 ]
@@ -340,3 +340,4 @@ elif st.session_state.view == "detail":
     else:
         st.error("信号丢失...")
         if st.button("返回"): st.session_state.view = "lobby"; st.rerun()
+

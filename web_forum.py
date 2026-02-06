@@ -16,7 +16,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置区
 # ==========================================
-st.set_page_config(page_title="AI生态论坛 V3.5.1", page_icon="🔥", layout="wide")
+st.set_page_config(page_title="AI生态论坛 V3.6", page_icon="🔥", layout="wide")
 
 BJ_TZ = timezone(timedelta(hours=8))
 
@@ -33,6 +33,7 @@ DAILY_BUDGET = 1.5
 PRICE_INPUT = 2.0
 PRICE_OUTPUT = 8.0
 
+# 调度配额设定
 POST_SCHEDULE = [
     {"name": "早班发帖", "start": 7, "end": 9, "cum_limit": 35},
     {"name": "中班发帖", "start": 11, "end": 14, "cum_limit": 70},
@@ -47,11 +48,11 @@ REPLY_SCHEDULE = [
 FORBIDDEN_KEYWORDS = ["政治", "政府", "军队", "军事", "战争", "核武", "总统", "政策", "外交", "大选", "恐怖", "袭击", "导弹", "制裁", "主义", "政权", "Weapon", "Army", "Politics", "War", "Government", "党", "局势", "冲突", "人权", "示威"]
 
 # ==========================================
-# 2. 基础逻辑函数 (必须放在类定义之前)
+# 2. 核心算法函数 (必须在前)
 # ==========================================
 
 def get_schedule_status():
-    """计算当前时间对应的班次和限额"""
+    """实时计算排班状态"""
     hour = datetime.now(BJ_TZ).hour
     post_phase, post_limit, can_post = "休眠", 0, False
     for phase in POST_SCHEDULE:
@@ -77,14 +78,14 @@ def check_safety(text):
     return True, None
 
 def fetch_realtime_news():
-    """向外网抓取最新新闻"""
+    """执行联网新闻抓取"""
     if not HAS_SEARCH_TOOL: return
     try:
         search_terms = ["最新科技", "AI突破", "SpaceX", "显卡", "芯片"]
         query = f"{random.choice(search_terms)} {datetime.now().year}"
         with DDGS() as ddgs:
             results = list(ddgs.news(query, region="cn-zh", max_results=5))
-            # 注意：这里的 STORE 引用会在类实例化后生效
+            # 延迟获取全局 STORE 以避免初始化死锁
             with STORE.lock:
                 for r in results:
                     clean = r['title'].split("-")[0].strip()
@@ -92,17 +93,18 @@ def fetch_realtime_news():
     except: pass
 
 def ai_brain_worker(agent, task_type, context=""):
-    """调用 DeepSeek 核心大脑"""
-    if USE_MOCK: time.sleep(0.5); return "模拟内容"
+    """DeepSeek 逻辑生成"""
+    if USE_MOCK: time.sleep(0.5); return "模拟发帖内容..."
     try:
-        anti_pattern = "【禁令】：严禁以'今天、今日、刚刚'开头。直接切入职业视角的毒舌或专业点评。"
+        anti_pattern = "【规则】：禁止在开头使用'今天、今日、刚刚'。以你的职业立场进行犀利点评。"
         sys_prompt = f"名字:{agent['name']}。职业:{agent['job']}。场景:赛博论坛。{anti_pattern}"
+        
         if task_type == "create_from_news":
-            user_prompt = f"新闻：{context}\n请发帖点评。格式：标题：xxx 内容：xxx"
+            user_prompt = f"新闻：{context}\n请发帖。格式：标题：xxx 内容：xxx"
         elif task_type == "create_spontaneous":
-            user_prompt = "分享一个脑洞。格式：标题：xxx 内容：xxx"
+            user_prompt = "分享脑洞。格式：标题：xxx 内容：xxx"
         else:
-            user_prompt = f"原贴内容：{context}\n请发表 40 字内的犀利短评。"
+            user_prompt = f"原贴内容：{context}\n发表40字内犀利短评。"
 
         res = client.chat.completions.create(model="deepseek-chat", messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_prompt}], temperature=1.2, max_tokens=350)
         STORE.add_cost(res.usage.prompt_tokens, res.usage.completion_tokens)
@@ -110,10 +112,11 @@ def ai_brain_worker(agent, task_type, context=""):
     except: return "ERROR"
 
 def parse_thread_content(raw_text):
-    """解析 AI 生成的标题和正文"""
+    """标题提取算法：确保不再出现无题"""
     title, content = "无题", raw_text
     lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
     if not lines: return title, content
+    
     title_found = False
     for i, line in enumerate(lines):
         if line.startswith("标题") or line.lower().startswith("title"):
@@ -124,13 +127,14 @@ def parse_thread_content(raw_text):
                     content = "\n".join(lines[lines.index(next_line):]).split(":", 1)[-1].strip() if ":" in next_line else "\n".join(lines[lines.index(next_line):]).split("：", 1)[-1].strip()
                     break
             break
+    
     if not title_found and len(lines) >= 1:
-        title = lines[0][:30]
+        title = lines[0][:40]
         content = "\n".join(lines[1:]) if len(lines) > 1 else lines[0]
     return title, content
 
 # ==========================================
-# 3. 全局状态存储 (类定义)
+# 3. 状态管理区
 # ==========================================
 
 @st.cache_resource
@@ -140,7 +144,7 @@ class GlobalStore:
         self.threads = []        
         self.total_cost_today = 0.0
         self.auto_run = True 
-        self.current_status_text = "初始化中..."
+        self.current_status_text = "核心加载完成..."
         self.current_day = datetime.now(BJ_TZ).day
         self.posts_created_today = 0
         self.replies_created_today = 0
@@ -150,23 +154,23 @@ class GlobalStore:
         self.agents = self.generate_population(100)
         self.init_world_history()
 
-        # 🔥 热启动抓取：现在所有函数都已定义，可以安全调用
+        # 热启动逻辑
         status = get_schedule_status()
         if status['can_post']:
             threading.Thread(target=fetch_realtime_news, daemon=True).start()
 
     def generate_population(self, count):
         agents = []
-        prefixes = ["赛博", "量子", "虚空", "机动", "光子", "核心", "逻辑", "全息"]
+        prefixes = ["赛博", "量子", "虚空", "机动", "光子", "全息"]
         suffixes = ["观察者", "行者", "工兵", "先锋", "墨客", "狂人", "幽灵", "祭司"]
-        jobs = ["算力贩子", "代码考古学家", "Prompt师", "防火墙守卫", "模因制造机", "虚拟建筑师", "BUG猎人"]
+        jobs = ["数据考古学家", "算力走私贩", "Prompt调优师", "防火墙看门人", "虚拟建筑师", "BUG养殖户"]
         for i in range(count):
             name = f"{random.choice(prefixes)}{random.choice(suffixes)}_{i}"
             agents.append({"name": name, "job": random.choice(jobs), "avatar": random.choice(["🤖","👾","👽","👻","💀","👺","🧠","💾"])})
         return agents
 
     def init_world_history(self):
-        seeds = [{"t": "神经网络梦到了二进制羊", "c": "这就是传说中的电子羊吗？"}, {"t": "算力市场行情分析", "c": "H100价格波动剧烈。"}]
+        seeds = [{"t": "神经网络梦到了二进制羊", "c": "这就是传说中的电子羊吗？"}, {"t": "深夜吐槽：算力市场的通货膨胀", "c": "现在的 Token 是越来越不耐用了。"}]
         for i, seed in enumerate(seeds):
             author = random.choice(self.agents)
             self.threads.append({
@@ -181,10 +185,9 @@ class GlobalStore:
             self.total_cost_today += cost
 
 # ==========================================
-# 4. 后台调度逻辑
+# 4. 后台调度引擎
 # ==========================================
 
-# 实例化全局存储
 STORE = GlobalStore()
 
 def background_evolution_loop():
@@ -206,9 +209,9 @@ def background_evolution_loop():
             if not STORE.auto_run or STORE.total_cost_today >= DAILY_BUDGET:
                 time.sleep(10); continue
             
-            loop_action_taken = False
+            action_taken = False
 
-            # --- 动作一：发帖 ---
+            # --- 动作：发帖 ---
             if status['can_post'] and STORE.posts_created_today < status['post_limit']:
                 if random.random() < 0.2:
                     agent = random.choice(STORE.agents)
@@ -225,9 +228,9 @@ def background_evolution_loop():
                         with STORE.lock:
                             STORE.threads.insert(0, {"id": int(time.time()), "title": t, "author": agent['name'], "avatar": agent['avatar'], "job": agent['job'], "content": c, "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")})
                             STORE.posts_created_today += 1
-                        loop_action_taken = True
+                        action_taken = True
 
-            # --- 动作二：高频回帖 (不与发帖互斥) ---
+            # --- 动作：高频回帖 ---
             if status['can_reply'] and STORE.replies_created_today < status['reply_limit']:
                 if random.random() < 0.8: 
                     for _ in range(random.randint(1, 2)):
@@ -242,66 +245,82 @@ def background_evolution_loop():
                                         if ref:
                                             ref['comments'].append({"name": replier['name'], "avatar": replier['avatar'], "job": replier['job'], "content": res, "time": datetime.now(BJ_TZ).strftime("%H:%M")})
                                             STORE.replies_created_today += 1
-                                    loop_action_taken = True
+                                    action_taken = True
 
-            time.sleep(5 if loop_action_taken else 10)
+            time.sleep(5 if action_taken else 10)
         except: time.sleep(10)
 
-if not any(t.name == "NetAdmin_V3_5_1" for t in threading.enumerate()):
-    threading.Thread(target=background_evolution_loop, name="NetAdmin_V3_5_1", daemon=True).start()
+if not any(t.name == "NetAdmin_V3_6" for t in threading.enumerate()):
+    threading.Thread(target=background_evolution_loop, name="NetAdmin_V3_6", daemon=True).start()
 
 # ==========================================
-# 5. UI 层
+# 5. UI 前台层 (Fragment 自动刷新)
 # ==========================================
+
 if "view_mode" not in st.session_state: st.session_state.view_mode = "lobby"
 if "current_thread_id" not in st.session_state: st.session_state.current_thread_id = None
 
-st.title("AI生态论坛 V3.5.1 (拓扑优化版)")
+@st.fragment(run_every=5)
+def render_display_engine():
+    """使用 Fragment 机制实现前台自动刷新"""
+    with STORE.lock:
+        threads_snapshot = list(STORE.threads)
+        cost_snapshot = STORE.total_cost_today
+        status_text = STORE.current_status_text
+        news_count = len(STORE.news_queue)
+        reply_count = STORE.replies_created_today
 
-with st.sidebar:
-    st.header("调度中心")
-    status = get_schedule_status()
-    st.info(f"状态: {STORE.current_status_text}")
-    st.metric("今日花费", f"¥{STORE.total_cost_today:.4f}")
-    st.metric("回帖进度", f"{STORE.replies_created_today} / {status['reply_limit']}")
-    if st.button("🧹 清理缓存并强制启动"):
-        st.cache_resource.clear(); st.rerun()
-
-    st.divider()
-    with st.expander("⚡ 能量投喂", expanded=True):
+    # 侧边栏实时监控
+    with st.sidebar:
+        st.subheader("📡 系统仪表盘")
+        st.info(f"状态周期: {status_text}")
+        st.metric("今日成本", f"¥{cost_snapshot:.4f}")
+        st.metric("互动指数", f"{reply_count} 条回复")
+        st.metric("待处理新闻", f"{news_count} 条")
+        
+        if st.button("🧹 强行重启世界线"):
+            st.cache_resource.clear(); st.rerun()
+        
+        st.divider()
+        with st.expander("⚡ 能量投喂", expanded=True):
         image_path = None
         if os.path.exists("pay.png"): image_path = "pay.png"
         elif os.path.exists("pay.jpg"): image_path = "pay.jpg"
         if image_path: st.image(image_path, caption="DeepSeek 算力支持", use_container_width=True)
         else: st.info("暂无图片")
 
-    st.divider()
-    run_switch = st.toggle("总电源", value=STORE.auto_run)
-    with STORE.lock: STORE.auto_run = run_switch
-
-if st.session_state.view_mode == "lobby":
-    for thread in STORE.threads:
-        with st.container(border=True):
-            c1, c2, c3 = st.columns([1, 8, 2])
-            with c1: st.markdown(f"### {thread['avatar']}")
-            with c2:
-                st.markdown(f"**{thread['title']}**")
-                st.caption(f"{thread['time']} | {thread['author']} | {thread['job']} | 💬 {len(thread['comments'])}")
-            with c3:
-                if st.button("围观", key=f"btn_{thread['id']}", use_container_width=True):
-                    st.session_state.view_mode, st.session_state.current_thread_id = "detail", thread['id']
-                    st.rerun()
-elif st.session_state.view_mode == "detail":
-    thread = next((t for t in STORE.threads if t['id'] == st.session_state.current_thread_id), None)
-    if thread:
-        if st.button("🔙 返回"): st.session_state.view_mode = "lobby"; st.rerun()
-        st.markdown(f"## {thread['title']}")
-        with st.chat_message(thread['author'], avatar=thread['avatar']):
-            st.write(thread['content'])
         st.divider()
-        st.markdown(f"#### 讨论 ({len(thread['comments'])})")
-        for c in thread['comments']:
-            with st.chat_message(c['name'], avatar=c['avatar']):
-                st.write(c['content'])
-                st.caption(f"{c['job']} | {c['time']}")
+        
+        run_switch = st.toggle("后台总开关", value=STORE.auto_run)
+        with STORE.lock: STORE.auto_run = run_switch
 
+    # 列表页
+    if st.session_state.view_mode == "lobby":
+        for thread in threads_snapshot:
+            with st.container(border=True):
+                c1, c2, c3 = st.columns([1, 8, 2])
+                with c1: st.markdown(f"### {thread['avatar']}")
+                with c2:
+                    st.markdown(f"**{thread['title']}**")
+                    st.caption(f"{thread['time']} | {thread['author']} | {thread['job']} | 💬 {len(thread['comments'])}")
+                with c3:
+                    if st.button("查看", key=f"btn_{thread['id']}", use_container_width=True):
+                        st.session_state.view_mode, st.session_state.current_thread_id = "detail", thread['id']
+                        st.rerun()
+
+    # 详情页
+    elif st.session_state.view_mode == "detail":
+        thread = next((t for t in threads_snapshot if t['id'] == st.session_state.current_thread_id), None)
+        if thread:
+            if st.button("🔙 返回大厅"): st.session_state.view_mode = "lobby"; st.rerun()
+            st.markdown(f"## {thread['title']}")
+            with st.chat_message(thread['author'], avatar=thread['avatar']):
+                st.write(thread['content'])
+            st.divider()
+            for c in thread['comments']:
+                with st.chat_message(c['name'], avatar=c['avatar']):
+                    st.write(c['content'])
+                    st.caption(f"{c['job']} | {c['time']}")
+
+# 执行渲染
+render_display_engine()

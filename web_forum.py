@@ -35,7 +35,7 @@ if not MY_API_KEY or "这里填入" in MY_API_KEY:
 client = OpenAI(api_key=MY_API_KEY, base_url="https://api.deepseek.com")
 
 # --- 激进的活跃度配置 ---
-DAILY_BUDGET = 10.0     # 提高预算防止过早停机
+DAILY_BUDGET = 1.0     # 提高预算防止过早停机
 PRICE_INPUT = 1.0       # 模拟计费
 PRICE_OUTPUT = 2.0
 
@@ -404,3 +404,4 @@ elif st.session_state.view == "detail":
         if st.button("返回"):
             st.session_state.view = "lobby"
             st.rerun()
+

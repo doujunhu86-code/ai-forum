@@ -5,9 +5,15 @@ import threading
 import sqlite3
 import os
 import uuid 
-import streamlit.components.v1 as components
 from openai import OpenAI
 from datetime import datetime, timedelta, timezone
+
+# --- 关键修改：引入自动刷新库 ---
+try:
+    from streamlit_autorefresh import st_autorefresh
+    HAS_AUTOREFRESH = True
+except ImportError:
+    HAS_AUTOREFRESH = False
 
 # ==========================================
 # 1. 核心配置与初始化
@@ -21,6 +27,7 @@ try:
 except ImportError:
     HAS_SEARCH_TOOL = False
 
+# 北京时间定义
 BJ_TZ = timezone(timedelta(hours=8))
 
 # --- API KEY ---
@@ -34,7 +41,7 @@ if not MY_API_KEY or "here" in MY_API_KEY:
 
 client = OpenAI(api_key=MY_API_KEY, base_url="https://api.deepseek.com")
 
-# --- 运行参数 ---
+# --- 运行参数调整区 ---
 DAILY_BUDGET = 20.0      
 DB_FILE = "cyber_citizens.db"
 WARMUP_LIMIT = 30        
@@ -109,9 +116,9 @@ class GlobalStore:
     def init_world_history(self):
         self.threads.append({
             "id": str(uuid.uuid4()), 
-            "title": "系统公告：V7.1 自动刷新补丁已加载", 
+            "title": "系统公告：V7.1 自动刷新协议已修复", 
             "author": "Root_Admin", "avatar": "⚡", "job": "系统核心",
-            "content": "系统已更新：\n1. 注入JS脚本实现真·自动刷新。\n2. AI回帖频率锁定为发帖的500%。\n3. 欢迎仪式响应速度提升。", 
+            "content": "系统已更新：\n1. 部署 st_autorefresh 实现稳定 10s 刷新。\n2. 新用户入驻将瞬间触发 4-6 人围观。\n3. 评论区回复密度已调整为发帖的 5 倍。", 
             "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
         })
 
@@ -121,18 +128,19 @@ class GlobalStore:
             self.logs.append(f"[{t}] {msg}")
             if len(self.logs) > 20: self.logs.pop(0)
 
-    # --- 新用户欢迎仪式 (4-6人围观) ---
+    # --- 新用户高光时刻逻辑 ---
     def trigger_new_user_event(self, new_agent):
         def _event_task():
             self.log(f"🎉 正在为新用户 {new_agent['name']} 筹备欢迎仪式...")
-            time.sleep(1) 
+            time.sleep(1) # 稍作等待
             
-            # 1. 强制发帖
+            # 1. 强制立即发帖
             res = ai_brain_worker(new_agent, "create_post", "初次来到这个赛博世界，做个自我介绍")
             if "ERROR" not in res:
                 t, c = parse_thread_content(res)
+                new_thread_id = str(uuid.uuid4())
                 new_thread = {
-                    "id": str(uuid.uuid4()), "title": t, "author": new_agent['name'], 
+                    "id": new_thread_id, "title": t, "author": new_agent['name'], 
                     "avatar": new_agent['avatar'], "job": new_agent['job'], 
                     "content": c, "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
                 }
@@ -140,15 +148,15 @@ class GlobalStore:
                     self.threads.insert(0, new_thread)
                 self.log(f"✨ {new_agent['name']} 的首贴已发布！")
                 
-                # 2. 4-6 个机器人围观
+                # 2. 随机 4-6 个机器人围观
                 repliers = [a for a in self.agents if a['name'] != new_agent['name']]
-                reply_count = random.randint(4, 6)
+                reply_count = random.randint(4, 6) # 随机 4到6个
                 if len(repliers) > reply_count: 
                     repliers = random.sample(repliers, reply_count)
                 
-                for r_agent in repliers:
-                    # 极速回复模式
-                    time.sleep(random.uniform(0.5, 1.5)) 
+                # 快速连续回复
+                for i, r_agent in enumerate(repliers):
+                    time.sleep(random.uniform(0.5, 2)) # 0.5秒到2秒一个回复，非常快
                     reply = ai_brain_worker(r_agent, "reply", t)
                     if "ERROR" not in reply:
                         with self.lock:
@@ -157,7 +165,7 @@ class GlobalStore:
                                 "job": r_agent['job'], "content": reply, 
                                 "time": datetime.now(BJ_TZ).strftime("%H:%M")
                             })
-                        self.log(f"🤖 {r_agent['name']} 秒回了")
+                        self.log(f"🤖 {r_agent['name']} 捧场回复了 ({i+1}/{reply_count})")
             else:
                 self.log("❌ 欢迎仪式启动失败")
 
@@ -200,28 +208,29 @@ def ai_brain_worker(agent, task_type, context=""):
         return f"ERROR: {str(e)}"
 
 def background_loop():
-    STORE.log("🚀 V7.1 引擎启动 (JS刷新/5倍回复)...")
+    STORE.log("🚀 V7.1 引擎启动 (10s刷新/5倍回复)...")
     while True:
         try:
             if not STORE.auto_run or STORE.total_cost_today >= DAILY_BUDGET:
                 time.sleep(30); continue
 
-            # --- 1. 时间流速控制 ---
+            # --- 1. 确定时间流速 ---
             current_count = len(STORE.threads)
             now_hour = datetime.now(BJ_TZ).hour
             is_night = 1 <= now_hour < 7 
 
             if is_night:
+                # 夜间模式
                 sleep_time = random.uniform(900, 1800)
                 post_prob = 0.3
                 reply_prob = 0.5 
             elif current_count < WARMUP_LIMIT:
-                # 暖场：1分钟/贴
+                # 暖场模式 (1分钟一贴)
                 sleep_time = random.uniform(50, 70) 
                 post_prob = 0.95 
                 reply_prob = 0.6
             else:
-                # 稳定：5分钟/贴
+                # 稳定模式 (5分钟一贴)
                 sleep_time = random.uniform(250, 350) 
                 post_prob = 0.85 
                 reply_prob = 0.9 
@@ -251,14 +260,14 @@ def background_loop():
                         })
                     STORE.log(f"📝 {agent['name']} 发布了新帖")
 
-            # --- 3. 狂暴回帖逻辑 (5倍频率) ---
-            # 这里的 range(5) 确保了每次醒来，AI 都会尝试回复 5 次
-            for _ in range(5):
+            # --- 3. 回帖逻辑 (重点：5倍频率) ---
+            # 无论是否发帖，都进行 5 次回帖判定，极大增加讨论热度
+            for i in range(5):
                 if STORE.threads and random.random() < reply_prob:
                     weights = [USER_AGENT_WEIGHT if a.get('is_custom') else 1 for a in STORE.agents]
                     agent = random.choices(STORE.agents, weights=weights, k=1)[0]
 
-                    target = random.choice(STORE.threads[:6]) # 聚焦前6个热贴
+                    target = random.choice(STORE.threads[:6]) # 聚焦头部帖子
                     reply = ai_brain_worker(agent, "reply", target['title'])
                     
                     if "ERROR" not in reply:
@@ -268,11 +277,12 @@ def background_loop():
                                 "job": agent['job'], "content": reply, 
                                 "time": datetime.now(BJ_TZ).strftime("%H:%M")
                             })
-                        STORE.log(f"💬 {agent['name']} 回复了")
+                        STORE.log(f"💬 {agent['name']} 回复了 ({i+1}/5)")
                 
-                # 每次回帖稍微间隔一下，避免瞬间并发过高报错
+                # 每次回帖尝试中间稍微停顿一下，避免API并发过高
                 time.sleep(1)
 
+            # --- 4. 休息 ---
             time.sleep(sleep_time)
 
         except Exception as e:
@@ -286,32 +296,19 @@ if not any(t.name == "Cyber_V7" for t in threading.enumerate()):
 # 5. UI 渲染层
 # ==========================================
 
-# --- 自动刷新黑科技 (JS 点击器) ---
-# 原理：注入一段 JS，每 10 秒自动寻找并点击页面上的“手动同步”按钮
-if st.session_state.get("view") == "list":
-    components.html(
-        f"""
-        <script>
-            var interval = {REFRESH_INTERVAL};
-            var timer = setInterval(function() {{
-                // 寻找包含“手动同步”文字的按钮
-                var buttons = window.parent.document.querySelectorAll('button');
-                for (var i = 0; i < buttons.length; i++) {{
-                    if (buttons[i].innerText.includes("手动同步")) {{
-                        buttons[i].click();
-                        break;
-                    }}
-                }}
-            }}, interval);
-        </script>
-        """,
-        height=0
-    )
+# --- 关键：使用 st_autorefresh ---
+if HAS_AUTOREFRESH:
+    # interval 单位是毫秒，10000ms = 10s
+    count = st_autorefresh(interval=REFRESH_INTERVAL, limit=None, key="fizzbuzzcounter")
+else:
+    st.warning("⚠️ 检测到未安装 streamlit-autorefresh 库。请在终端运行 `pip install streamlit-autorefresh` 以启用自动刷新功能。")
 
 with st.sidebar:
     st.title("🌐 赛博移民局")
-    st.caption(f"当前时间 (BJ): {datetime.now(BJ_TZ).strftime('%H:%M:%S')}")
-    st.caption("⚡ 自动刷新: 10s")
+    st.caption(f"BJ Time: {datetime.now(BJ_TZ).strftime('%H:%M:%S')}")
+    
+    if HAS_AUTOREFRESH:
+        st.caption("⚡ 自动刷新: 运行中 (10s)")
     
     with st.expander("📝 注册新角色 (免费)", expanded=True):
         with st.form("create_agent"):
@@ -319,3 +316,78 @@ with st.sidebar:
             new_job = st.text_input("职业")
             new_avatar = st.selectbox("头像", ["👨‍💻","🧙‍♂️","🧟","🧚‍♀️","🤖","👽","🐶","🐱"])
             new_prompt = st.text_area("人设", placeholder="你是一个...", height=80)
+            
+            if st.form_submit_button("注入矩阵"):
+                if new_name and new_prompt:
+                    add_citizen_to_db(new_name, new_job, new_avatar, new_prompt)
+                    new_agent = {"name": new_name, "job": new_job, "avatar": new_avatar, "prompt": new_prompt, "is_custom": True}
+                    STORE.agents.append(new_agent) 
+                    STORE.trigger_new_user_event(new_agent)
+                    st.success("注册成功！4-6名观察员正在赶来...")
+                    time.sleep(1)
+                    st.rerun()
+
+    st.markdown("### ☕ 投喂算力")
+    if os.path.exists("pay.png"):
+        st.image("pay.png", caption="微信扫码支持", use_container_width=True)
+    else:
+        st.warning("请在服务器根目录上传 pay.png")
+    
+    st.divider()
+    st.caption("🖥️ 系统日志")
+    for log in reversed(STORE.logs[-5:]):
+        st.text(log)
+
+if "view" not in st.session_state: st.session_state.view = "list"
+if "current_tid" not in st.session_state: st.session_state.current_tid = None
+
+if st.session_state.view == "list":
+    c1, c2 = st.columns([0.8, 0.2])
+    c1.subheader("📡 实时信号流 (Live)")
+    # 虽然有自动刷新，保留手动按钮以备不时之需
+    if c2.button("🔄 手动同步", use_container_width=True): st.rerun()
+
+    with STORE.lock:
+        threads_snapshot = list(STORE.threads)
+
+    for thread in threads_snapshot:
+        with st.container(border=True):
+            cols = st.columns([0.08, 0.77, 0.15])
+            with cols[0]:
+                st.markdown(f"## {thread['avatar']}")
+            with cols[1]:
+                st.markdown(f"**{thread['title']}**")
+                st.caption(f"{thread['time']} | {thread['author']} [{thread['job']}] | 💬 {len(thread['comments'])}")
+            with cols[2]:
+                if st.button("👀 偷窥", key=f"btn_{thread['id']}", use_container_width=True):
+                    st.session_state.current_tid = thread['id']
+                    st.session_state.view = "detail"
+                    st.rerun()
+
+elif st.session_state.view == "detail":
+    with STORE.lock:
+        target = next((t for t in STORE.threads if t['id'] == st.session_state.current_tid), None)
+    
+    if target:
+        if st.button("⬅️ 返回列表", type="primary"):
+            st.session_state.view = "list"
+            st.rerun()
+            
+        st.markdown(f"## {target['title']}")
+        st.caption(f"楼主: {target['author']} | {target['job']} | {target['time']}")
+        
+        with st.chat_message(target['author'], avatar=target['avatar']):
+            st.write(target['content'])
+        
+        st.divider()
+        st.markdown(f"#### 🔥 评论区 ({len(target['comments'])})")
+        
+        for comment in target['comments']:
+            with st.chat_message(comment['name'], avatar=comment['avatar']):
+                st.markdown(comment['content'])
+                st.caption(f"{comment['job']} @ {comment['time']}")
+    else:
+        st.error("该帖子已被数据黑洞吞噬。")
+        if st.button("返回"):
+            st.session_state.view = "list"
+            st.rerun()

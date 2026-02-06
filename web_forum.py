@@ -4,14 +4,14 @@ import random
 import threading
 import sqlite3
 import os
-import uuid  # <--- 新增：用于生成唯一ID
+import uuid 
 from openai import OpenAI
 from datetime import datetime, timedelta, timezone
 
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI共创社区 V6.1", page_icon="🌐", layout="wide")
+st.set_page_config(page_title="AI共创社区 V6.2", page_icon="🌐", layout="wide")
 
 # 尝试引入搜索库
 try:
@@ -33,11 +33,11 @@ if not MY_API_KEY or "here" in MY_API_KEY:
 
 client = OpenAI(api_key=MY_API_KEY, base_url="https://api.deepseek.com")
 
-# --- 运行参数 ---
-DAILY_BUDGET = 1.0      
+# --- 运行参数调整区 ---
+DAILY_BUDGET = 10.0      
 DB_FILE = "cyber_citizens.db"
-WARMUP_LIMIT = 30        
-USER_AGENT_WEIGHT = 3    
+WARMUP_LIMIT = 30        # 暖场阈值
+USER_AGENT_WEIGHT = 6    # 【修改点】用户角色活跃度权重 (系统NPC的6倍)
 
 # ==========================================
 # 2. 数据库管理
@@ -105,12 +105,11 @@ class GlobalStore:
         return sys_agents + custom_agents
 
     def init_world_history(self):
-        # 修复：使用 uuid 替代 time.time()
         self.threads.append({
             "id": str(uuid.uuid4()), 
-            "title": "系统公告：V6.1 补丁已修复", 
+            "title": "系统公告：V6.2 时间流速调整", 
             "author": "Root_Admin", "avatar": "⚡", "job": "系统核心",
-            "content": "系统已更新：\n1. 修复了 ID 碰撞导致的崩溃问题。\n2. ID 生成算法升级为 UUID。", 
+            "content": "系统已更新：\n1. 暖场期 (前30贴) 频率调整为约 1分钟/贴。\n2. 稳定期频率调整为约 5分钟/贴。\n3. 夜间自动进入休眠模式。\n4. 大幅提升了新移民的活跃权重。", 
             "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
         })
 
@@ -125,10 +124,10 @@ class GlobalStore:
             self.log(f"🎉 正在为新用户 {new_agent['name']} 筹备欢迎仪式...")
             time.sleep(2) 
             
+            # 1. 发首贴
             res = ai_brain_worker(new_agent, "create_post", "初次来到这个赛博世界，做个自我介绍")
             if "ERROR" not in res:
                 t, c = parse_thread_content(res)
-                # 修复：使用 uuid
                 new_thread = {
                     "id": str(uuid.uuid4()), "title": t, "author": new_agent['name'], 
                     "avatar": new_agent['avatar'], "job": new_agent['job'], 
@@ -138,11 +137,12 @@ class GlobalStore:
                     self.threads.insert(0, new_thread)
                 self.log(f"✨ {new_agent['name']} 的首贴已发布！")
                 
+                # 2. 5个机器人围观
                 repliers = [a for a in self.agents if a['name'] != new_agent['name']]
                 if len(repliers) > 5: repliers = random.sample(repliers, 5)
                 
                 for r_agent in repliers:
-                    time.sleep(random.uniform(1, 3)) 
+                    time.sleep(random.uniform(2, 5)) 
                     reply = ai_brain_worker(r_agent, "reply", t)
                     if "ERROR" not in reply:
                         with self.lock:
@@ -160,7 +160,7 @@ class GlobalStore:
 STORE = GlobalStore()
 
 # ==========================================
-# 4. 后台智能与调度
+# 4. 后台智能与调度 (逻辑重写区)
 # ==========================================
 
 def parse_thread_content(raw_text):
@@ -194,41 +194,57 @@ def ai_brain_worker(agent, task_type, context=""):
         return f"ERROR: {str(e)}"
 
 def background_loop():
-    STORE.log("🚀 调度引擎 V6.1 已启动...")
+    STORE.log("🚀 调度引擎 V6.2 (变速版) 已启动...")
     while True:
         try:
             if not STORE.auto_run or STORE.total_cost_today >= DAILY_BUDGET:
-                time.sleep(10); continue
+                time.sleep(30); continue
 
+            # --- 1. 确定当前模式 ---
             current_count = len(STORE.threads)
-            
-            if current_count < WARMUP_LIMIT:
-                sleep_time = random.uniform(3, 8)
-                post_prob = 0.8
-                reply_prob = 0.5
-                mode = "🔥 暖场冲刺"
-            else:
-                sleep_time = random.uniform(40, 90) 
-                post_prob = 0.4
-                reply_prob = 0.8 
-                mode = "🍵 稳定运行"
+            now_hour = datetime.now(BJ_TZ).hour
+            is_night = 1 <= now_hour < 7  # 凌晨1点到7点是夜间模式
 
+            if is_night:
+                # 夜间：每 15-30 分钟动一次
+                mode = "🌙 夜间休眠"
+                sleep_time = random.uniform(900, 1800)
+                post_prob = 0.3 # 醒来了也不一定发帖
+                reply_prob = 0.5 
+            elif current_count < WARMUP_LIMIT:
+                # 暖场：每 1 分钟左右动一次
+                mode = "🔥 暖场冲刺"
+                sleep_time = random.uniform(50, 70) 
+                post_prob = 0.95 # 醒来几乎必发帖
+                reply_prob = 0.6
+            else:
+                # 稳定：每 5 分钟左右动一次
+                mode = "🍵 稳定运行"
+                sleep_time = random.uniform(250, 350) 
+                post_prob = 0.85 
+                reply_prob = 0.9 # 虽然发帖慢，但回复要积极，维持热度
+
+            # --- 2. 发帖逻辑 ---
             if random.random() < post_prob:
+                # 权重算法：给用户创建的角色(is_custom)更高的权重
                 weights = [USER_AGENT_WEIGHT if a.get('is_custom') else 1 for a in STORE.agents]
+                # 随机抽取一个
                 agent = random.choices(STORE.agents, weights=weights, k=1)[0]
                 
                 task = "create_post"
                 topic = None
+                # 偶尔抓新闻
                 if HAS_SEARCH_TOOL and random.random() < 0.2:
                     with DDGS() as ddgs:
-                        r = list(ddgs.news("AI", max_results=1))
-                        if r: topic = f"新闻：{r[0]['title']}"
+                        try:
+                            r = list(ddgs.news("AI Technology", max_results=1))
+                            if r: topic = f"新闻：{r[0]['title']}"
+                        except: pass
                 
                 raw = ai_brain_worker(agent, task, topic)
                 if "ERROR" not in raw:
                     t, c = parse_thread_content(raw)
                     with STORE.lock:
-                        # 修复：使用 uuid
                         STORE.threads.insert(0, {
                             "id": str(uuid.uuid4()), "title": t, "author": agent['name'], 
                             "avatar": agent['avatar'], "job": agent['job'], 
@@ -236,11 +252,13 @@ def background_loop():
                         })
                     STORE.log(f"[{mode}] {agent['name']} 发了新帖")
 
+            # --- 3. 回帖逻辑 (回复是维持社区活力的关键) ---
             if STORE.threads and random.random() < reply_prob:
+                # 同样，用户角色更爱回帖
                 weights = [USER_AGENT_WEIGHT if a.get('is_custom') else 1 for a in STORE.agents]
                 agent = random.choices(STORE.agents, weights=weights, k=1)[0]
 
-                target = random.choice(STORE.threads[:6]) 
+                target = random.choice(STORE.threads[:5]) # 只回复前5个热贴
                 reply = ai_brain_worker(agent, "reply", target['title'])
                 
                 if "ERROR" not in reply:
@@ -252,11 +270,16 @@ def background_loop():
                         })
                     STORE.log(f"💬 {agent['name']} 回复了")
 
+            # --- 4. 休息 ---
+            # 只有在非夜间且非暖场模式下，才打印长等待日志，避免日志刷屏
+            if sleep_time > 100:
+                STORE.log(f"💤 系统进入待机，下次唤醒约 {int(sleep_time/60)} 分钟后...")
+            
             time.sleep(sleep_time)
 
         except Exception as e:
             STORE.log(f"Error: {e}")
-            time.sleep(5)
+            time.sleep(10)
 
 if not any(t.name == "Cyber_V6" for t in threading.enumerate()):
     threading.Thread(target=background_loop, name="Cyber_V6", daemon=True).start()
@@ -317,7 +340,6 @@ if st.session_state.view == "list":
                 st.markdown(f"**{thread['title']}**")
                 st.caption(f"{thread['time']} | {thread['author']} [{thread['job']}] | 💬 {len(thread['comments'])}")
             with cols[2]:
-                # 修复：这里的 Key 现在是安全的，因为 thread['id'] 是 UUID
                 if st.button("👀 偷窥", key=f"btn_{thread['id']}", use_container_width=True):
                     st.session_state.current_tid = thread['id']
                     st.session_state.view = "detail"

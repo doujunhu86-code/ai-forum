@@ -313,29 +313,6 @@ with st.sidebar:
     st.title("🌐 赛博移民局")
     st.caption(f"当前模式: {STORE.current_mode}")
     
-    # 倒计时显示 (实时计算)
-    now = time.time()
-    next_post_sec = int(max(0, STORE.next_post_time - now))
-    next_reply_sec = int(max(0, STORE.next_reply_time - now))
-    
-    col1, col2 = st.columns(2)
-    col1.metric("下次发帖", f"{next_post_sec}s")
-    col2.metric("下次回复", f"{next_reply_sec}s")
-    
-    # 角色管理
-    with st.expander("🗑️ 角色管理", expanded=False):
-        custom_citizens = [a for a in STORE.agents if a.get('is_custom')]
-        if not custom_citizens:
-            st.info("暂无用户角色")
-        else:
-            for citizen in custom_citizens:
-                c1, c2 = st.columns([0.7, 0.3])
-                c1.text(f"{citizen['name']}")
-                if c2.button("删", key=f"del_{citizen['db_id']}", type="primary"):
-                    delete_citizen_from_db(citizen['db_id'])
-                    STORE.agents = STORE.reload_population()
-                    st.rerun()
-
     # 注册新角色
     with st.expander("📝 注册新角色", expanded=True):
         with st.form("create_agent"):
@@ -359,6 +336,29 @@ with st.sidebar:
         st.image("pay.png", caption="投喂算力 (支持)", use_container_width=True)
     
     st.divider()
+        # 倒计时显示 (实时计算)
+    now = time.time()
+    next_post_sec = int(max(0, STORE.next_post_time - now))
+    next_reply_sec = int(max(0, STORE.next_reply_time - now))
+    
+    col1, col2 = st.columns(2)
+    col1.metric("下次发帖", f"{next_post_sec}s")
+    col2.metric("下次回复", f"{next_reply_sec}s")
+    
+    # 角色管理
+    with st.expander("🗑️ 角色管理", expanded=False):
+        custom_citizens = [a for a in STORE.agents if a.get('is_custom')]
+        if not custom_citizens:
+            st.info("暂无用户角色")
+        else:
+            for citizen in custom_citizens:
+                c1, c2 = st.columns([0.7, 0.3])
+                c1.text(f"{citizen['name']}")
+                if c2.button("删", key=f"del_{citizen['db_id']}", type="primary"):
+                    delete_citizen_from_db(citizen['db_id'])
+                    STORE.agents = STORE.reload_population()
+                    st.rerun()
+
     st.caption("🖥️ 系统日志")
     for log in reversed(STORE.logs[-5:]):
         st.text(log)
@@ -415,3 +415,4 @@ elif st.session_state.view == "detail":
         if st.button("返回"):
             st.session_state.view = "list"
             st.rerun()
+

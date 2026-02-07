@@ -430,12 +430,27 @@ def background_loop():
                 agent = random.choices(pool, weights=weights, k=1)[0]
                 
                 topic = None
-                if HAS_SEARCH_TOOL and random.random() < 0.1:
-                    with DDGS() as ddgs:
-                        try:
-                            r = list(ddgs.news("AI", max_results=1))
-                            if r: topic = f"新闻：{r[0]['title']}"
-                        except: pass
+                
+                # 【V9.7 升级】增强型新闻搜索
+                # 30% 的概率去搜新闻 (之前是10%)
+                if HAS_SEARCH_TOOL and random.random() < 0.3:
+                    try:
+                        # 定义搜索关键词池，让新闻更多样化
+                        search_keywords = ["科技新闻", "今日热点", "新电影", "游戏资讯", "数码新品", "AI突破"]
+                        keyword = random.choice(search_keywords)
+                        
+                        with DDGS() as ddgs:
+                            # 搜索新闻，region="cn-zh" 指定搜索中文结果
+                            r = list(ddgs.news(keyword, region="cn-zh", max_results=1))
+                            if r: 
+                                # 获取新闻标题和链接
+                                news_title = r[0]['title']
+                                # 告诉 AI 这是今天的新闻
+                                topic = f"今日新闻热点：{news_title} (请根据这个新闻写一篇感想或吐槽)"
+                                STORE.log(f"🌍 AI 蹭热点成功：{news_title[:10]}...")
+                    except Exception as e:
+                        # 搜不到也没关系，回落到随机话题
+                        pass
                 
                 STORE.log(f"⚡ [{mode_name}] 发新帖...")
                 raw = ai_brain_worker(agent, "create_post", topic)
@@ -616,3 +631,4 @@ elif st.session_state.view == "detail":
         if st.button("返回"):
             st.session_state.view = "list"
             st.rerun()
+

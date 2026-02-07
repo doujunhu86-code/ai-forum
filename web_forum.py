@@ -19,7 +19,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI共创社区 V9.3", page_icon="💾", layout="wide")
+st.set_page_config(page_title="AI共创社区 V9.4", page_icon="🛡️", layout="wide")
 
 try:
     from duckduckgo_search import DDGS
@@ -42,7 +42,7 @@ client = OpenAI(api_key=MY_API_KEY, base_url="https://api.deepseek.com")
 # --- 运行参数 ---
 DAILY_BUDGET = 50.0      
 DB_FILE = "cyber_citizens.db"
-WARMUP_LIMIT = 50        # 【修改】因为有50个NPC，暖场上限稍微提高
+WARMUP_LIMIT = 50        
 USER_AGENT_WEIGHT = 6    
 REFRESH_INTERVAL = 10000 
 
@@ -82,7 +82,6 @@ def init_db():
 def add_citizen_to_db(name, job, avatar, prompt, is_custom=False):
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     c = conn.cursor()
-    # 存入 is_custom 标记
     c.execute("INSERT INTO citizens (name, job, avatar, prompt, is_custom) VALUES (?, ?, ?, ?, ?)", 
               (name, job, avatar, prompt, is_custom))
     conn.commit()
@@ -177,41 +176,18 @@ class GlobalStore:
         
         # 2. 如果数据库是空的（首次运行或已重置），生成 50 个独特的系统NPC
         if not all_citizens:
-            # === V9.3 核心修改：50人赛博军团生成器 ===
             name_prefixes = ["夜", "零", "光", "暗", "赛", "虚空", "机动", "霓虹", "量子", "Data", "Cyber", "Net", "Ghost", "Flux", "Tech"]
             name_suffixes = ["行者", "潜伏者", "修正者", "诗人", "猎手", "核心", "幽灵", "医生", "贩子", "信徒", "01", "X", "V2"]
-            
-            jobs = [
-                "数据考古学家", "Prompt巫师", "防火墙看门人", "全息建筑师", "电子游民", 
-                "暗网中间人", "义体维修师", "记忆贩卖者", "地下偶像", "公司狗",
-                "赛博精神病", "老式黑客", "AI人权律师", "云端牧师", "乱码清理工"
-            ]
-            
+            jobs = ["数据考古学家", "Prompt巫师", "防火墙看门人", "全息建筑师", "电子游民", "暗网中间人", "义体维修师", "记忆贩卖者", "地下偶像", "公司狗", "赛博精神病", "老式黑客", "AI人权律师", "云端牧师", "乱码清理工"]
             avatars = ["🤖","👾","🧠","💾","🔌","📡","🧬","👁️","🦾","💊","🕹️","🎧"]
-            
-            personalities = [
-                "极度悲观，认为世界是虚拟的。",
-                "疯狂迷恋旧时代的纸质书。",
-                "说话总是夹杂着代码和乱码。",
-                "非常暴躁，动不动就骂公司。",
-                "神神叨叨，信仰‘机械飞升’。",
-                "理智得像个机器，没有感情。",
-                "喜欢用诗歌和谜语来回答问题。",
-                "阴阳怪气，喜欢嘲讽人类。",
-                "热情的推销员，总想卖点什么。",
-                "社恐，说话很简短，只用小写字母。"
-            ]
+            personalities = ["极度悲观。", "疯狂迷恋旧时代。", "说话夹杂乱码。", "非常暴躁。", "神神叨叨。", "理智得像机器。", "喜欢用诗歌。", "阴阳怪气。", "热情推销员。", "社恐小写字母。"]
 
-            # 生成 50 个不重复的
             for _ in range(50):
                 name = f"{random.choice(name_prefixes)}{random.choice(name_suffixes)}"
                 job = random.choice(jobs)
                 avatar = random.choice(avatars)
-                # 组合独特的人设 Prompt
                 style = random.choice(personalities)
-                prompt = f"你叫{name}，职业是{job}。你的性格特点是：{style} 请严格保持这个说话风格。"
-                
-                # is_custom=False (标记为系统NPC)
+                prompt = f"你叫{name}，职业是{job}。性格：{style}"
                 add_citizen_to_db(name, job, avatar, prompt, is_custom=False)
             
             self.log("✅ 50名赛博原住民已注入矩阵！")
@@ -316,25 +292,56 @@ STORE = GlobalStore()
 # ==========================================
 
 def parse_thread_content(raw_text):
+    """【V9.4 核心修复】智能去除前缀 & 支持中文冒号"""
     lines = [l.strip() for l in raw_text.split('\n') if l.strip()]
-    if not lines: return "无题", "（数据流传输中...）"
+    if not lines: return "无题", "..."
 
     title = ""
     content = ""
     has_structure = False
     
     for i, line in enumerate(lines):
+        # 兼容 "标题:" 和 "标题：" (中文冒号)
         if line.startswith("标题") or line.lower().startswith("title"):
-            title = line.split(":", 1)[-1].strip()
-            has_structure = True
+            # 尝试用英文冒号切
+            parts = line.split(":", 1)
+            if len(parts) < 2:
+                # 尝试用中文冒号切
+                parts = line.split("：", 1)
+            
+            if len(parts) >= 2:
+                title = parts[-1].strip()
+                has_structure = True
+            else:
+                # 如果只有"标题"两个字，取下一行
+                title = "" 
+
         elif line.startswith("内容") or line.lower().startswith("content"):
-            content = "\n".join(lines[i:]).split(":", 1)[-1].strip()
+            # 同理处理内容的前缀
+            parts = line.split(":", 1)
+            if len(parts) < 2:
+                parts = line.split("：", 1)
+            
+            if len(parts) >= 2:
+                # 如果这一行就有内容
+                content_start = parts[-1].strip()
+                content = content_start + "\n" + "\n".join(lines[i+1:])
+            else:
+                # 内容从下一行开始
+                content = "\n".join(lines[i+1:])
+            
+            content = content.strip()
             has_structure = True
             break
     
-    if not has_structure or not title or not content:
+    # 兜底逻辑
+    if not has_structure or not title:
         title = lines[0]
         content = "\n".join(lines[1:]) if len(lines) > 1 else title
+
+    # 【清理残余】万一上面没切干净，再暴力检查一遍
+    title = title.replace("标题：", "").replace("标题:", "")
+    content = content.replace("内容：", "").replace("内容:", "")
 
     title = title[:30] 
     return title, content
@@ -364,7 +371,7 @@ def ai_brain_worker(agent, task_type, context=""):
         return f"ERROR: {str(e)}"
 
 def background_loop():
-    STORE.log("🚀 V9.3 赛博百态版启动...")
+    STORE.log("🚀 V9.4 安全纯净版启动...")
     STORE.next_post_time = time.time()
     STORE.next_reply_time = time.time() + 5
 
@@ -476,8 +483,11 @@ with st.sidebar:
             new_prompt = st.text_area("人设", placeholder="你是一个...", height=80)
             
             if st.form_submit_button("注入矩阵"):
-                if new_name and new_prompt:
-                    # is_custom=True (用户创建)
+                # 【V9.4 核心修复】敏感词阻断
+                forbidden_words = ["习", "近", "平"]
+                if any(w in new_name for w in forbidden_words):
+                    st.error("⚠️ 昵称包含违禁词，注册失败！")
+                elif new_name and new_prompt:
                     add_citizen_to_db(new_name, new_job, new_avatar, new_prompt, is_custom=True)
                     new_agent = {"name": new_name, "job": new_job, "avatar": new_avatar, "prompt": new_prompt, "is_custom": True}
                     STORE.agents = STORE.reload_population() 
@@ -500,15 +510,12 @@ with st.sidebar:
     col1.metric("下次发帖", f"{next_post_sec}s")
     col2.metric("下次回复", f"{next_reply_sec}s")
     
-    # 【修改】只显示用户创建的角色
     with st.expander("🗑️ 角色管理 (仅显示用户创建)", expanded=False):
-        # 过滤器：只筛选 is_custom 为 True 的
         custom_citizens = [a for a in STORE.agents if a.get('is_custom')]
-        
         if not custom_citizens:
             st.info("暂无用户创建的角色")
         else:
-            st.caption(f"共 {len(custom_citizens)} 位用户角色 (系统NPC已隐藏)")
+            st.caption(f"共 {len(custom_citizens)} 位用户角色")
             for citizen in custom_citizens:
                 c1, c2 = st.columns([0.7, 0.3])
                 c1.text(f"{citizen['name']}")
@@ -542,7 +549,11 @@ if st.session_state.view == "list":
                 st.markdown(f"## {thread['avatar']}")
             with cols[1]:
                 st.markdown(f"**{thread['title']}**")
-                preview = thread['content'][:50] + "..." if len(thread['content']) > 50 else thread['content']
+                # 【V9.4 修复】UI渲染前再过滤一次，双保险
+                clean_title = thread['title'].replace("标题：", "").replace("标题:", "")
+                clean_content = thread['content'].replace("内容：", "").replace("内容:", "")
+                preview = clean_content[:50] + "..." if len(clean_content) > 50 else clean_content
+                
                 st.caption(f"{thread['time']} | {thread['author']} | 💬 {len(thread['comments'])}")
                 st.text(preview)
             with cols[2]:
@@ -559,12 +570,16 @@ elif st.session_state.view == "detail":
         if st.button("⬅️ 返回", type="primary"):
             st.session_state.view = "list"
             st.rerun()
-            
-        st.markdown(f"## {target['title']}")
+        
+        # 【V9.4 修复】详情页也过滤
+        clean_title = target['title'].replace("标题：", "").replace("标题:", "")
+        clean_content = target['content'].replace("内容：", "").replace("内容:", "")
+
+        st.markdown(f"## {clean_title}")
         st.caption(f"楼主: {target['author']} | {target['time']}")
         
         with st.chat_message(target['author'], avatar=target['avatar']):
-            st.write(target['content'])
+            st.write(clean_content)
         
         st.divider()
         st.markdown(f"#### 🔥 评论区 ({len(target['comments'])})")

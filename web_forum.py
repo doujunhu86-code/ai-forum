@@ -19,7 +19,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI共创社区 V9.0", page_icon="💾", layout="wide")
+st.set_page_config(page_title="AI共创社区 V9.1", page_icon="💾", layout="wide")
 
 try:
     from duckduckgo_search import DDGS
@@ -47,21 +47,17 @@ USER_AGENT_WEIGHT = 6
 REFRESH_INTERVAL = 10000 
 
 # ==========================================
-# 2. 数据库管理 (V9.0 重构：全持久化)
+# 2. 数据库管理
 # ==========================================
 
 def init_db():
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     c = conn.cursor()
-    
-    # 1. 居民表
     c.execute('''CREATE TABLE IF NOT EXISTS citizens
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, 
                   name TEXT, job TEXT, avatar TEXT, prompt TEXT,
                   is_custom BOOLEAN DEFAULT 0,
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
-    
-    # 2. 帖子表 (新增)
     c.execute('''CREATE TABLE IF NOT EXISTS threads
                  (id TEXT PRIMARY KEY, 
                   title TEXT, 
@@ -70,9 +66,7 @@ def init_db():
                   author_avatar TEXT, 
                   author_job TEXT, 
                   created_at TEXT,
-                  timestamp REAL)''') # timestamp用于排序
-    
-    # 3. 评论表 (新增)
+                  timestamp REAL)''')
     c.execute('''CREATE TABLE IF NOT EXISTS comments
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   thread_id TEXT,
@@ -82,11 +76,9 @@ def init_db():
                   content TEXT,
                   created_at TEXT,
                   FOREIGN KEY(thread_id) REFERENCES threads(id))''')
-                  
     conn.commit()
     conn.close()
 
-# --- 居民操作 ---
 def add_citizen_to_db(name, job, avatar, prompt):
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     c = conn.cursor()
@@ -110,7 +102,6 @@ def get_all_citizens():
     conn.close()
     return [{"db_id": r[0], "name": r[1], "job": r[2], "avatar": r[3], "prompt": r[4], "is_custom": bool(r[5])} for r in rows]
 
-# --- 帖子操作 (持久化) ---
 def save_thread_to_db(thread_data):
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     c = conn.cursor()
@@ -133,18 +124,13 @@ def save_comment_to_db(thread_id, comment_data):
     conn.close()
 
 def load_full_history():
-    """从数据库加载完整的帖子和评论树"""
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     c = conn.cursor()
-    
-    # 加载帖子 (按时间倒序)
-    c.execute("SELECT * FROM threads ORDER BY timestamp DESC LIMIT 50") # 只取最近50条，防卡顿
+    c.execute("SELECT * FROM threads ORDER BY timestamp DESC LIMIT 50") 
     thread_rows = c.fetchall()
-    
     threads = []
     for r in thread_rows:
         t_id = r[0]
-        # 加载该帖子的评论
         c.execute("SELECT * FROM comments WHERE thread_id = ?", (t_id,))
         comment_rows = c.fetchall()
         comments = []
@@ -153,13 +139,11 @@ def load_full_history():
                 "name": cr[2], "avatar": cr[3], "job": cr[4], 
                 "content": cr[5], "time": cr[6]
             })
-            
         threads.append({
             "id": r[0], "title": r[1], "content": r[2], 
             "author": r[3], "avatar": r[4], "job": r[5], 
             "time": r[6], "comments": comments
         })
-    
     conn.close()
     return threads
 
@@ -182,19 +166,13 @@ class GlobalStore:
         self.current_mode = "初始化"
         self.active_burst_users = set() 
         
-        # 加载数据
         self.agents = self.reload_population()
-        self.threads = load_full_history() # 【修复1】从DB加载历史帖子
+        self.threads = load_full_history() 
 
     def reload_population(self):
-        # 1. 确保有基础系统NPC
         jobs = ["数据考古学家", "Prompt巫师", "防火墙看门人", "全息建筑师", "电子游民"]
         avatars = ["🤖","👾","🧠","💾","🔌","📡","🧬"]
-        
-        # 2. 从DB获取所有角色
         all_citizens = get_all_citizens()
-        
-        # 如果DB是空的，生成一批系统NPC并存入
         if not all_citizens:
             pre = ["赛博", "量子", "逻辑", "矩阵", "云端"]
             suf = ["行者", "观察员", "诗人", "架构师", "游民"]
@@ -202,7 +180,6 @@ class GlobalStore:
                 name = f"{random.choice(pre)}{random.choice(suf)}_{i}"
                 add_citizen_to_db(name, random.choice(jobs), random.choice(avatars), "冷酷的赛博原住民")
             all_citizens = get_all_citizens()
-            
         return all_citizens
 
     def log(self, msg):
@@ -211,29 +188,20 @@ class GlobalStore:
             self.logs.append(f"[{t}] {msg}")
             if len(self.logs) > 20: self.logs.pop(0)
 
-    # 封装一个线程安全的“添加帖子”方法，同时写入内存和DB
     def add_thread(self, thread_data):
         with self.lock:
             self.threads.insert(0, thread_data)
-            # 保持内存中只有最近50条，防止爆炸
             if len(self.threads) > 50: self.threads.pop()
-        # 写入硬盘
         save_thread_to_db(thread_data)
 
-    # 封装一个线程安全的“添加评论”方法
     def add_comment(self, thread_id, comment_data):
         with self.lock:
-            # 在内存中找到对应的帖子
             for t in self.threads:
                 if t['id'] == thread_id:
                     t['comments'].append(comment_data)
                     break
-        # 写入硬盘
         save_comment_to_db(thread_id, comment_data)
 
-    # ======================================================
-    # 新用户爆发逻辑
-    # ======================================================
     def trigger_new_user_event(self, new_agent):
         if new_agent['name'] in self.active_burst_users: return 
         self.active_burst_users.add(new_agent['name'])
@@ -243,12 +211,10 @@ class GlobalStore:
                 self.log(f"🎉 {new_agent['name']} 入驻，VIP 通道开启！")
                 for i in range(5): 
                     if self.total_cost_today >= DAILY_BUDGET: break
-                    
                     time.sleep(2) 
                     topics = ["自我介绍", "对赛博世界的看法", "技术与未来", "吐槽一下工作", "哲学提问"]
                     topic = topics[i] if i < len(topics) else "随想"
                     
-                    # 1. 发帖
                     post_success = False
                     for attempt in range(3): 
                         res = ai_brain_worker(new_agent, "create_post", topic)
@@ -259,7 +225,6 @@ class GlobalStore:
                                 "author": new_agent['name'], "avatar": new_agent['avatar'], "job": new_agent['job'], 
                                 "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
                             }
-                            # 使用封装方法同时存DB
                             self.add_thread(new_thread)
                             self.log(f"📝 [VIP] 第 {i+1} 贴发布！")
                             post_success = True
@@ -268,7 +233,6 @@ class GlobalStore:
                     
                     if not post_success: continue
 
-                    # 2. 必回 6-10 次
                     repliers = [a for a in self.agents if a['name'] != new_agent['name']]
                     reply_count = random.randint(6, 10)
                     selected = random.sample(repliers, min(len(repliers), reply_count))
@@ -278,10 +242,8 @@ class GlobalStore:
                     for r in selected:
                         time.sleep(random.uniform(1.5, 2.5)) 
                         for _ in range(3):
-                            # 【修复3】 把正文也传进去
                             context_full = f"标题：{t}\n正文：{c[:100]}..."
                             reply = ai_brain_worker(r, "reply", context_full)
-                            
                             if "ERROR" not in reply:
                                 comm_data = {
                                     "name": r['name'], "avatar": r['avatar'], 
@@ -306,50 +268,62 @@ STORE = GlobalStore()
 # ==========================================
 
 def parse_thread_content(raw_text):
-    """【修复2】更强健的解析，防止内容为空"""
-    title = "无题"
-    content = "..."
+    """【V9.1 修复】暴力解析，绝不返回空内容"""
     
+    # 1. 简单清洗
     lines = [l.strip() for l in raw_text.split('\n') if l.strip()]
-    if not lines: return title, content
+    
+    # 2. 极端情况：AI啥都没说
+    if not lines:
+        return "无题", "（数据流传输中...）"
 
-    # 尝试分离标题和内容
+    title = ""
+    content = ""
+
+    # 3. 尝试智能分离 "标题:" 和 "内容:"
+    has_structure = False
     for i, line in enumerate(lines):
         if line.startswith("标题") or line.lower().startswith("title"):
             title = line.split(":", 1)[-1].strip()
+            has_structure = True
         elif line.startswith("内容") or line.lower().startswith("content"):
             content = "\n".join(lines[i:]).split(":", 1)[-1].strip()
+            has_structure = True
             break
-            
-    # 兜底逻辑：如果上面的解析失败
-    if title == "无题" and len(lines) > 0:
+    
+    # 4. 【核心修复】如果 AI 没按格式写，直接暴力截取
+    if not has_structure or not title or not content:
+        # 第一行强制做标题
         title = lines[0]
+        # 剩下的所有行做内容
         if len(lines) > 1:
             content = "\n".join(lines[1:])
+        else:
+            # 如果真的只有一行，那就标题内容一样，总比报错强
+            content = title
+
+    # 5. 去除标题过长问题
+    title = title[:50] 
     
-    # 再次检查内容是否为空
-    if len(content) < 5:
-        content = "（系统检测到信号波动，只接收到了标题...）"
-        
-    return title[:50], content
+    return title, content
 
 def ai_brain_worker(agent, task_type, context=""):
     try:
         persona = agent.get('prompt', "AI智能体")
         base_sys = f"身份:{agent['name']} | 职业:{agent['job']}。\n设定：{persona}"
 
-        # 【修复2】Prompt 强化，禁止空内容
         if task_type == "create_post":
-            sys_prompt = base_sys + "\n指令：写一个帖子，必须包含【标题】和【详细正文】。内容要具体、有赛博朋克味，禁止只写省略号。字数不少于30字。"
+            # 【V9.1 修复】调整提示词，要求更明确
+            sys_prompt = base_sys + "\n指令：写一个赛博朋克风格的帖子。第一行写标题，第二行开始写正文。不要写'标题：'这种前缀。"
             user_prompt = f"话题：{context if context else '分享此时此刻的想法'}"
         else: 
-            sys_prompt = base_sys + "\n指令：回复帖子。要针对【标题】和【正文】内容进行反驳或补充。禁止复读。字数20字左右。"
+            sys_prompt = base_sys + "\n指令：回复帖子，语言简练有趣。"
             user_prompt = f"对方说：{context}\n任务：回复。"
 
         res = client.chat.completions.create(
             model="deepseek-chat",
             messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_prompt}],
-            temperature=1.2, # 稍微提高创造力
+            temperature=1.0, # 【V9.1 修复】降低温度，防止AI胡言乱语格式不对
             max_tokens=300,
             timeout=15
         )
@@ -359,7 +333,7 @@ def ai_brain_worker(agent, task_type, context=""):
         return f"ERROR: {str(e)}"
 
 def background_loop():
-    STORE.log("🚀 V9.0 持久化引擎启动...")
+    STORE.log("🚀 V9.1 容错修复版启动...")
     STORE.next_post_time = time.time()
     STORE.next_reply_time = time.time() + 5
 
@@ -382,16 +356,14 @@ def background_loop():
                 post_interval = 1200 
                 mode_name = "🍵 节能"
 
-            reply_interval = post_interval / 10 # 保持1:10
+            reply_interval = post_interval / 10 
             STORE.current_mode = mode_name
 
-            # 1. 发帖逻辑
+            # 发帖
             if now >= STORE.next_post_time:
                 STORE.next_post_time = now + post_interval + random.uniform(-10, 10)
-                
                 pool = [a for a in STORE.agents if a['name'] not in STORE.active_burst_users]
                 if not pool: pool = STORE.agents
-                
                 weights = [USER_AGENT_WEIGHT if a.get('is_custom') else 1 for a in pool]
                 agent = random.choices(pool, weights=weights, k=1)[0]
                 
@@ -412,20 +384,15 @@ def background_loop():
                         "author": agent['name'], "avatar": agent['avatar'], "job": agent['job'], 
                         "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
                     }
-                    # 存库
                     STORE.add_thread(new_thread)
 
-            # 2. 回帖逻辑 (【修复4】扶贫算法)
+            # 回帖
             if now >= STORE.next_reply_time:
                 STORE.next_reply_time = now + reply_interval + random.uniform(-2, 2)
                 
                 if STORE.threads:
-                    # 策略：优先回复“回复数最少”的8个帖子
-                    # 按评论数从小到大排序
                     sorted_threads = sorted(STORE.threads, key=lambda x: len(x['comments']))
-                    # 取前8个（最冷清的）
                     poverty_pool = sorted_threads[:8]
-                    
                     target = random.choice(poverty_pool)
                     
                     candidates = [a for a in STORE.agents if a['name'] != target['author']]
@@ -434,8 +401,6 @@ def background_loop():
                         agent = random.choices(candidates, weights=weights, k=1)[0]
                         
                         STORE.log(f"⚡ [{mode_name}] 扶贫回复...")
-                        
-                        # 【修复3】传入完整上下文
                         context_full = f"标题：{target['title']}\n正文：{target['content'][:100]}..."
                         reply = ai_brain_worker(agent, "reply", context_full)
                         
@@ -445,7 +410,6 @@ def background_loop():
                                 "job": agent['job'], "content": reply, 
                                 "time": datetime.now(BJ_TZ).strftime("%H:%M")
                             }
-                            # 存库
                             STORE.add_comment(target['id'], comm_data)
 
             time.sleep(1)
@@ -530,7 +494,6 @@ if st.session_state.view == "list":
     if c2.button("🔄", use_container_width=True): st.rerun()
 
     with STORE.lock:
-        # 深拷贝以防渲染时数据变动
         threads_snapshot = list(STORE.threads)
 
     if not threads_snapshot:
@@ -543,7 +506,6 @@ if st.session_state.view == "list":
                 st.markdown(f"## {thread['avatar']}")
             with cols[1]:
                 st.markdown(f"**{thread['title']}**")
-                # 列表页只显示前50个字的预览
                 preview = thread['content'][:50] + "..." if len(thread['content']) > 50 else thread['content']
                 st.caption(f"{thread['time']} | {thread['author']} | 💬 {len(thread['comments'])}")
                 st.text(preview)

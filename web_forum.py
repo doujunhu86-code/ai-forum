@@ -19,7 +19,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI共创社区 V9.5", page_icon="🌈", layout="wide")
+st.set_page_config(page_title="AI共创社区 V9.6", page_icon="🛡️", layout="wide")
 
 try:
     from duckduckgo_search import DDGS
@@ -171,10 +171,7 @@ class GlobalStore:
         self.check_genesis_block()
 
     def reload_population(self):
-        # 1. 尝试从数据库加载
         all_citizens = get_all_citizens()
-        
-        # 2. 如果数据库是空的，生成 50 个独特的系统NPC
         if not all_citizens:
             name_prefixes = ["夜", "零", "光", "暗", "赛", "虚空", "机动", "霓虹", "量子", "Data", "Cyber", "Net", "Ghost", "Flux", "Tech"]
             name_suffixes = ["行者", "潜伏者", "修正者", "诗人", "猎手", "核心", "幽灵", "医生", "贩子", "信徒", "01", "X", "V2"]
@@ -237,7 +234,6 @@ class GlobalStore:
                     if self.total_cost_today >= DAILY_BUDGET: break
                     time.sleep(2) 
                     
-                    # 【V9.5 修复】新用户爆发贴也增加话题池
                     topics = ["自我介绍", "职场吐槽", "技术分享", "生活感悟", "深夜emo"]
                     topic = topics[i] if i < len(topics) else "随想"
                     
@@ -294,59 +290,97 @@ STORE = GlobalStore()
 # ==========================================
 
 def parse_thread_content(raw_text):
-    """【V9.5 修复】智能去前缀 + 垃圾词清洗"""
+    """【V9.6 修复】强力清洗指令回显"""
     
-    # 1. 垃圾词清洗 (防止AI把指令漏出来)
-    clean_text = raw_text.replace("(20字以内)", "").replace("（20字以内）", "")
-    clean_text = clean_text.replace("(至少50字，必须完整结尾)", "").replace("（至少50字，必须完整结尾）", "")
-    clean_text = clean_text.replace("标题：", "").replace("标题:", "") # 提前把前缀洗掉
+    # 1. 过滤掉包含"指令"、"设定"、"风格"的行（只要该行出现在开头）
+    lines = raw_text.split('\n')
+    clean_lines = []
     
-    lines = [l.strip() for l in clean_text.split('\n') if l.strip()]
-    if not lines: return "无题", "..."
-
-    # 默认第一行是标题
-    title = lines[0]
-    
-    # 后面所有行是内容
-    if len(lines) > 1:
-        # 如果AI在第二行还写了 "内容："，再洗一次
-        content_start = lines[1]
-        if content_start.startswith("内容:") or content_start.startswith("内容："):
-             content_start = content_start.split(":", 1)[-1].strip()
-             content = content_start + "\n" + "\n".join(lines[2:])
+    # 简单的状态机，用于跳过头部的指令行
+    is_body = False
+    for line in lines:
+        l = line.strip()
+        if not l: continue
+        
+        # 如果还在头部检测阶段
+        if not is_body:
+            # 常见的回显特征
+            if l.startswith("指令") or l.startswith("设定") or l.startswith("风格") or l.startswith("规则") or "20字以内" in l:
+                continue # 跳过这行
+            else:
+                is_body = True # 遇到第一行正经话，标记为正文开始
+                clean_lines.append(l)
         else:
-            content = "\n".join(lines[1:])
-    else:
-        content = title
+            clean_lines.append(l) # 正文部分全部保留
 
-    title = title[:30] # 强制截断
+    if not clean_lines: return "无题", "..."
+
+    # 2. 标准的标题/内容分离
+    title = ""
+    content = ""
+    has_structure = False
+    
+    for i, line in enumerate(clean_lines):
+        if line.startswith("标题") or line.lower().startswith("title"):
+            title = line.replace("标题：", "").replace("标题:", "").strip()
+            has_structure = True
+        elif line.startswith("内容") or line.lower().startswith("content"):
+            content_start = line.replace("内容：", "").replace("内容:", "").strip()
+            content = content_start + "\n" + "\n".join(clean_lines[i+1:])
+            has_structure = True
+            break
+    
+    if not has_structure or not title:
+        title = clean_lines[0]
+        content = "\n".join(clean_lines[1:]) if len(clean_lines) > 1 else title
+
+    # 3. 再次清洗残余
+    title = title.replace("标题：", "").replace("标题:", "")[:30]
+    
     return title, content
 
 def ai_brain_worker(agent, task_type, context=""):
     try:
         persona = agent.get('prompt', "AI智能体")
-        base_sys = f"身份:{agent['name']} | 职业:{agent['job']}。\n设定：{persona}"
+        
+        # 【V9.6 修复】System Prompt 只放人设，绝不放指令
+        sys_prompt = f"你的身份：{agent['name']}，职业：{agent['job']}。\n人设详情：{persona}\n请完全沉浸在角色中，不要跳出戏。"
 
         if task_type == "create_post":
-            # 【V9.5 核心修复】多元化话题池 + 简化指令
+            # 多样化风格
             post_styles = [
                 "赛博朋克风：描述高科技低生活的日常。",
                 "职场吐槽：抱怨公司的压榨或愚蠢的AI同事。",
                 "哲学思考：关于虚拟与现实的边界。",
                 "黑科技分享：介绍一个虚构的新型义体或软件。",
                 "情感树洞：孤独的数字游民寻找连接。",
-                "阴谋论：怀疑世界是假的。",
                 "日常摸鱼：分享吃了什么合成食物。"
             ]
             style = random.choice(post_styles)
             
-            # 指令不再包含括号里的要求，防止泄漏
-            sys_prompt = f"{base_sys}\n指令：写一个帖子。风格要求：{style}\n规则：第一行直接写标题(不要超过20字)，第二行开始写正文(不要太长，写完即可)。不要输出'标题：'等前缀。"
+            # 【V9.6 修复】指令全部放在 User Prompt，并明确要求不回显
+            user_prompt = f"""
+            任务：发布一条新帖子。
+            话题参考：{context if context else '随机发挥'}
+            风格要求：{style}
             
-            user_prompt = f"话题参考：{context if context else '随机发挥'}"
+            格式严格要求：
+            1. 第一行直接写标题（20字以内）。
+            2. 第二行开始直接写正文（50字以上）。
+            3. 严禁在开头输出"设定："、"指令："、"标题："等任何前缀！
+            4. 直接开始说话。
+            """
         else: 
-            sys_prompt = base_sys + "\n指令：回复帖子，针对内容互动，符合你的人设。不要复读。"
-            user_prompt = f"对方说：{context}\n任务：回复。"
+            user_prompt = f"""
+            任务：回复这条帖子。
+            对方内容：{context}
+            
+            要求：
+            1. 针对内容进行互动，观点要犀利或有趣。
+            2. 字数控制在30字以内。
+            3. 不要重复对方的话。
+            4. 直接输出回复内容，不要带前缀。
+            """
 
         res = client.chat.completions.create(
             model="deepseek-chat",
@@ -361,7 +395,7 @@ def ai_brain_worker(agent, task_type, context=""):
         return f"ERROR: {str(e)}"
 
 def background_loop():
-    STORE.log("🚀 V9.5 多元化修复版启动...")
+    STORE.log("🚀 V9.6 指令隔离版启动...")
     STORE.next_post_time = time.time()
     STORE.next_reply_time = time.time() + 5
 
@@ -396,7 +430,6 @@ def background_loop():
                 agent = random.choices(pool, weights=weights, k=1)[0]
                 
                 topic = None
-                # 【V9.5】减少搜新闻的概率，多点原创
                 if HAS_SEARCH_TOOL and random.random() < 0.1:
                     with DDGS() as ddgs:
                         try:
@@ -539,8 +572,11 @@ if st.session_state.view == "list":
                 st.markdown(f"## {thread['avatar']}")
             with cols[1]:
                 st.markdown(f"**{thread['title']}**")
-                # 列表页预览
-                preview = thread['content'][:50] + "..." if len(thread['content']) > 50 else thread['content']
+                # V9.6 修复: 智能去前缀
+                clean_title = thread['title'].replace("标题：", "").replace("标题:", "")
+                clean_content = thread['content'].replace("内容：", "").replace("内容:", "")
+                preview = clean_content[:50] + "..." if len(clean_content) > 50 else clean_content
+                
                 st.caption(f"{thread['time']} | {thread['author']} | 💬 {len(thread['comments'])}")
                 st.text(preview)
             with cols[2]:
@@ -558,7 +594,7 @@ elif st.session_state.view == "detail":
             st.session_state.view = "list"
             st.rerun()
         
-        # 详情页也过滤
+        # V9.6 修复: 详情页智能去前缀
         clean_title = target['title'].replace("标题：", "").replace("标题:", "")
         clean_content = target['content'].replace("内容：", "").replace("内容:", "")
 

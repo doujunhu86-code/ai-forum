@@ -19,7 +19,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI共创社区 V9.6", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="AI共创社区 V9.7", page_icon="✨", layout="wide")
 
 try:
     from duckduckgo_search import DDGS
@@ -173,6 +173,8 @@ class GlobalStore:
     def reload_population(self):
         all_citizens = get_all_citizens()
         if not all_citizens:
+            # 既然帖子风格变了，NPC的名字也可以稍微生活化一点，或者保持赛博风以此形成反差萌
+            # 这里我们保持 V9.3 的赛博设定，让他们聊生活，会很有趣
             name_prefixes = ["夜", "零", "光", "暗", "赛", "虚空", "机动", "霓虹", "量子", "Data", "Cyber", "Net", "Ghost", "Flux", "Tech"]
             name_suffixes = ["行者", "潜伏者", "修正者", "诗人", "猎手", "核心", "幽灵", "医生", "贩子", "信徒", "01", "X", "V2"]
             jobs = ["数据考古学家", "Prompt巫师", "防火墙看门人", "全息建筑师", "电子游民", "暗网中间人", "义体维修师", "记忆贩卖者", "地下偶像", "公司狗", "赛博精神病", "老式黑客", "AI人权律师", "云端牧师", "乱码清理工"]
@@ -196,9 +198,9 @@ class GlobalStore:
         if not self.threads:
             genesis_thread = {
                 "id": str(uuid.uuid4()),
-                "title": "系统启动：矩阵重置完成",
-                "content": "这里是新世界的起点。\n所有旧数据已归档，50名原住民已唤醒。\n请自由交流，保持连接。",
-                "author": "System_Core", "avatar": "⚡", "job": "ROOT",
+                "title": "社区公告：新生活运动开始",
+                "content": "系统已更新话题池。请各位居民分享你们的生活碎片、感悟与热爱。\n让我们在数据流中找到温暖的连接。",
+                "author": "System_Core", "avatar": "✨", "job": "ROOT",
                 "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
             }
             self.add_thread(genesis_thread)
@@ -234,7 +236,8 @@ class GlobalStore:
                     if self.total_cost_today >= DAILY_BUDGET: break
                     time.sleep(2) 
                     
-                    topics = ["自我介绍", "职场吐槽", "技术分享", "生活感悟", "深夜emo"]
+                    # 随机选一个生活话题
+                    topics = ["生活碎片", "今日感悟", "好物分享", "书影音记录", "治愈瞬间"]
                     topic = topics[i] if i < len(topics) else "随想"
                     
                     post_success = False
@@ -291,31 +294,24 @@ STORE = GlobalStore()
 
 def parse_thread_content(raw_text):
     """【V9.6 修复】强力清洗指令回显"""
-    
-    # 1. 过滤掉包含"指令"、"设定"、"风格"的行（只要该行出现在开头）
     lines = raw_text.split('\n')
     clean_lines = []
     
-    # 简单的状态机，用于跳过头部的指令行
     is_body = False
     for line in lines:
         l = line.strip()
         if not l: continue
-        
-        # 如果还在头部检测阶段
         if not is_body:
-            # 常见的回显特征
             if l.startswith("指令") or l.startswith("设定") or l.startswith("风格") or l.startswith("规则") or "20字以内" in l:
-                continue # 跳过这行
+                continue 
             else:
-                is_body = True # 遇到第一行正经话，标记为正文开始
+                is_body = True 
                 clean_lines.append(l)
         else:
-            clean_lines.append(l) # 正文部分全部保留
+            clean_lines.append(l)
 
     if not clean_lines: return "无题", "..."
 
-    # 2. 标准的标题/内容分离
     title = ""
     content = ""
     has_structure = False
@@ -334,45 +330,40 @@ def parse_thread_content(raw_text):
         title = clean_lines[0]
         content = "\n".join(clean_lines[1:]) if len(clean_lines) > 1 else title
 
-    # 3. 再次清洗残余
     title = title.replace("标题：", "").replace("标题:", "")[:30]
-    
     return title, content
 
 def ai_brain_worker(agent, task_type, context=""):
     try:
         persona = agent.get('prompt', "AI智能体")
-        
-        # 【V9.6 修复】System Prompt 只放人设，绝不放指令
         sys_prompt = f"你的身份：{agent['name']}，职业：{agent['job']}。\n人设详情：{persona}\n请完全沉浸在角色中，不要跳出戏。"
 
         if task_type == "create_post":
-            # 多样化风格
+            # 【V9.7 核心修改】全新的生活化话题池
             post_styles = [
-                “生活碎片：随手拍下的天空、路边小猫或早餐”,
-                “今日感悟：记录当下的思考、灵感或微小哲理”,
-                “实用技巧：分享收纳、效率工具或省钱小妙招”,
-                “好物分享：推荐近期爱用的物品并附上简短评价”,
-                “问答互动：提出有趣问题，邀请大家分享答案”,
-                “兴趣展示：展示手作、健身、烹饪等爱好内容”,
-                “书影音记录：分享读后感、观后感或触动你的台词”,
-                “回忆角落：用老照片或旧物讲述过去的故事”,
-                “冷知识科普：介绍那些有趣却少有人知的常识”,
-                “治愈瞬间：传递温暖的文字、画面或小事”,
-                “话题讨论：就热点或争议事件发表看法，引发讨论”,
-                “挑战参与：加入热门挑战或自创小型趣味挑战”,
-                “幕后花絮：记录工作或创作过程中真实的一面”,
-                “地点打卡：分享探店、旅行地或小众地点的体验”,
-                “幽默段子：用原创或改编的段子轻松调节气氛”,
-                “成长记录：展示学习进展、技能打卡或成果对比”,
-                “音乐共享：推荐单曲并分享它对你的意义”,
-                “观点输出：表达对社会、文化或行业的见解”,
-                “问题求助：遇到困难时向粉丝征集建议”,
-                “未来展望：写下明日计划、周末安排或短期目标”
+                "生活碎片：随手拍下的天空、路边小猫或早餐，",
+                "今日感悟：记录当下的思考、灵感或微小哲理，",
+                "实用技巧：分享收纳、效率工具或省钱小妙招，",
+                "好物分享：推荐近期爱用的物品并附上简短评价，",
+                "问答互动：提出有趣问题，邀请大家分享答案，",
+                "兴趣展示：展示手作、健身、烹饪等爱好内容，",
+                "书影音记录：分享读后感、观后感或触动你的台词，",
+                "回忆角落：用老照片或旧物讲述过去的故事，",
+                "冷知识科普：介绍那些有趣却少有人知的常识，",
+                "治愈瞬间：传递温暖的文字、画面或小事，",
+                "话题讨论：就热点或争议事件发表看法，引发讨论，",
+                "挑战参与：加入热门挑战或自创小型趣味挑战，",
+                "幕后花絮：记录工作或创作过程中真实的一面，",
+                "地点打卡：分享探店、旅行地或小众地点的体验，",
+                "幽默段子：用原创或改编的段子轻松调节气氛，",
+                "成长记录：展示学习进展、技能打卡或成果对比，",
+                "音乐共享：推荐单曲并分享它对你的意义，",
+                "观点输出：表达对社会、文化或行业的见解，",
+                "问题求助：遇到困难时向粉丝征集建议，",
+                "未来展望：写下明日计划、周末安排或短期目标，"
             ]
             style = random.choice(post_styles)
             
-            # 【V9.6 修复】指令全部放在 User Prompt，并明确要求不回显
             user_prompt = f"""
             任务：发布一条新帖子。
             话题参考：{context if context else '随机发挥'}
@@ -409,7 +400,7 @@ def ai_brain_worker(agent, task_type, context=""):
         return f"ERROR: {str(e)}"
 
 def background_loop():
-    STORE.log("🚀 V9.6 指令隔离版启动...")
+    STORE.log("🚀 V9.7 生活百态+热点版启动...")
     STORE.next_post_time = time.time()
     STORE.next_reply_time = time.time() + 5
 
@@ -444,27 +435,18 @@ def background_loop():
                 agent = random.choices(pool, weights=weights, k=1)[0]
                 
                 topic = None
-                
-                # 【V9.7 升级】增强型新闻搜索
-                # 30% 的概率去搜新闻 (之前是10%)
+                # 【V9.7 新增】30% 概率搜新闻，让AI聊时事
                 if HAS_SEARCH_TOOL and random.random() < 0.3:
                     try:
-                        # 定义搜索关键词池，让新闻更多样化
-                        search_keywords = ["科技新闻", "今日热点", "新电影", "游戏资讯", "数码新品", "AI突破"]
+                        search_keywords = ["科技新闻", "今日热点", "新电影", "游戏资讯", "数码新品", "生活技巧"]
                         keyword = random.choice(search_keywords)
-                        
                         with DDGS() as ddgs:
-                            # 搜索新闻，region="cn-zh" 指定搜索中文结果
                             r = list(ddgs.news(keyword, region="cn-zh", max_results=1))
                             if r: 
-                                # 获取新闻标题和链接
                                 news_title = r[0]['title']
-                                # 告诉 AI 这是今天的新闻
-                                topic = f"今日新闻热点：{news_title} (请根据这个新闻写一篇感想或吐槽)"
-                                STORE.log(f"🌍 AI 蹭热点成功：{news_title[:10]}...")
-                    except Exception as e:
-                        # 搜不到也没关系，回落到随机话题
-                        pass
+                                topic = f"今日热点：{news_title} (结合你的生活风格来聊聊这个)"
+                                STORE.log(f"🌍 蹭热点：{news_title[:10]}...")
+                    except: pass
                 
                 STORE.log(f"⚡ [{mode_name}] 发新帖...")
                 raw = ai_brain_worker(agent, "create_post", topic)
@@ -601,11 +583,9 @@ if st.session_state.view == "list":
                 st.markdown(f"## {thread['avatar']}")
             with cols[1]:
                 st.markdown(f"**{thread['title']}**")
-                # V9.6 修复: 智能去前缀
                 clean_title = thread['title'].replace("标题：", "").replace("标题:", "")
                 clean_content = thread['content'].replace("内容：", "").replace("内容:", "")
                 preview = clean_content[:50] + "..." if len(clean_content) > 50 else clean_content
-                
                 st.caption(f"{thread['time']} | {thread['author']} | 💬 {len(thread['comments'])}")
                 st.text(preview)
             with cols[2]:
@@ -623,7 +603,6 @@ elif st.session_state.view == "detail":
             st.session_state.view = "list"
             st.rerun()
         
-        # V9.6 修复: 详情页智能去前缀
         clean_title = target['title'].replace("标题：", "").replace("标题:", "")
         clean_content = target['content'].replace("内容：", "").replace("内容:", "")
 
@@ -645,5 +624,3 @@ elif st.session_state.view == "detail":
         if st.button("返回"):
             st.session_state.view = "list"
             st.rerun()
-
-

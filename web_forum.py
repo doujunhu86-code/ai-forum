@@ -19,7 +19,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI共创社区 V9.1", page_icon="💾", layout="wide")
+st.set_page_config(page_title="AI共创社区 V9.2", page_icon="💾", layout="wide")
 
 try:
     from duckduckgo_search import DDGS
@@ -168,6 +168,9 @@ class GlobalStore:
         
         self.agents = self.reload_population()
         self.threads = load_full_history() 
+        
+        # 【修复3】如果世界是空的，创建一个创世贴
+        self.check_genesis_block()
 
     def reload_population(self):
         jobs = ["数据考古学家", "Prompt巫师", "防火墙看门人", "全息建筑师", "电子游民"]
@@ -181,6 +184,19 @@ class GlobalStore:
                 add_citizen_to_db(name, random.choice(jobs), random.choice(avatars), "冷酷的赛博原住民")
             all_citizens = get_all_citizens()
         return all_citizens
+
+    def check_genesis_block(self):
+        """如果数据库为空，生成第一条默认帖子，防止回帖器空转"""
+        if not self.threads:
+            genesis_thread = {
+                "id": str(uuid.uuid4()),
+                "title": "系统启动：欢迎来到新世界",
+                "content": "服务器已重置。矩阵重启完成。\n请各位居民开始自由交流。\n(这是一条自动生成的创世贴，用于引导讨论流)",
+                "author": "System_Admin", "avatar": "⚡", "job": "ROOT",
+                "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
+            }
+            self.add_thread(genesis_thread)
+            self.log("✨ 创世贴已生成！")
 
     def log(self, msg):
         t = datetime.now(BJ_TZ).strftime("%H:%M:%S")
@@ -268,20 +284,14 @@ STORE = GlobalStore()
 # ==========================================
 
 def parse_thread_content(raw_text):
-    """【V9.1 修复】暴力解析，绝不返回空内容"""
-    
-    # 1. 简单清洗
+    """【V9.1 容错】+【V9.2 修复】标题限长"""
     lines = [l.strip() for l in raw_text.split('\n') if l.strip()]
-    
-    # 2. 极端情况：AI啥都没说
-    if not lines:
-        return "无题", "（数据流传输中...）"
+    if not lines: return "无题", "（数据流传输中...）"
 
     title = ""
     content = ""
-
-    # 3. 尝试智能分离 "标题:" 和 "内容:"
     has_structure = False
+    
     for i, line in enumerate(lines):
         if line.startswith("标题") or line.lower().startswith("title"):
             title = line.split(":", 1)[-1].strip()
@@ -291,19 +301,12 @@ def parse_thread_content(raw_text):
             has_structure = True
             break
     
-    # 4. 【核心修复】如果 AI 没按格式写，直接暴力截取
     if not has_structure or not title or not content:
-        # 第一行强制做标题
         title = lines[0]
-        # 剩下的所有行做内容
-        if len(lines) > 1:
-            content = "\n".join(lines[1:])
-        else:
-            # 如果真的只有一行，那就标题内容一样，总比报错强
-            content = title
+        content = "\n".join(lines[1:]) if len(lines) > 1 else title
 
-    # 5. 去除标题过长问题
-    title = title[:50] 
+    # 【修复1】标题强制截断，防止太长
+    title = title[:30] # 限制30字以内，防止UI炸裂
     
     return title, content
 
@@ -313,19 +316,19 @@ def ai_brain_worker(agent, task_type, context=""):
         base_sys = f"身份:{agent['name']} | 职业:{agent['job']}。\n设定：{persona}"
 
         if task_type == "create_post":
-            # 【V9.1 修复】调整提示词，要求更明确
-            sys_prompt = base_sys + "\n指令：写一个赛博朋克风格的帖子。第一行写标题，第二行开始写正文。不要写'标题：'这种前缀。"
+            # 【修复1】Prompt 增加字数限制
+            sys_prompt = base_sys + "\n指令：写一个赛博朋克风的帖子。格式为：\n标题：(20字以内)\n内容：(至少50字，必须完整结尾)。"
             user_prompt = f"话题：{context if context else '分享此时此刻的想法'}"
         else: 
-            sys_prompt = base_sys + "\n指令：回复帖子，语言简练有趣。"
+            sys_prompt = base_sys + "\n指令：回复帖子，针对内容互动。"
             user_prompt = f"对方说：{context}\n任务：回复。"
 
         res = client.chat.completions.create(
             model="deepseek-chat",
             messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_prompt}],
-            temperature=1.0, # 【V9.1 修复】降低温度，防止AI胡言乱语格式不对
-            max_tokens=300,
-            timeout=15
+            temperature=1.0, 
+            max_tokens=600, # 【修复2】大幅增加Token上限，防止说话说一半
+            timeout=20      # 稍微增加超时容忍
         )
         STORE.total_cost_today += 0.001 
         return res.choices[0].message.content.strip()
@@ -333,7 +336,7 @@ def ai_brain_worker(agent, task_type, context=""):
         return f"ERROR: {str(e)}"
 
 def background_loop():
-    STORE.log("🚀 V9.1 容错修复版启动...")
+    STORE.log("🚀 V9.2 完美体验版启动...")
     STORE.next_post_time = time.time()
     STORE.next_reply_time = time.time() + 5
 

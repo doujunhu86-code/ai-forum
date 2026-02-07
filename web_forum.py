@@ -19,7 +19,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI共创社区 V9.2", page_icon="💾", layout="wide")
+st.set_page_config(page_title="AI共创社区 V9.3", page_icon="💾", layout="wide")
 
 try:
     from duckduckgo_search import DDGS
@@ -42,7 +42,7 @@ client = OpenAI(api_key=MY_API_KEY, base_url="https://api.deepseek.com")
 # --- 运行参数 ---
 DAILY_BUDGET = 50.0      
 DB_FILE = "cyber_citizens.db"
-WARMUP_LIMIT = 30        
+WARMUP_LIMIT = 50        # 【修改】因为有50个NPC，暖场上限稍微提高
 USER_AGENT_WEIGHT = 6    
 REFRESH_INTERVAL = 10000 
 
@@ -79,11 +79,12 @@ def init_db():
     conn.commit()
     conn.close()
 
-def add_citizen_to_db(name, job, avatar, prompt):
+def add_citizen_to_db(name, job, avatar, prompt, is_custom=False):
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     c = conn.cursor()
-    c.execute("INSERT INTO citizens (name, job, avatar, prompt, is_custom) VALUES (?, ?, ?, ?, 1)", 
-              (name, job, avatar, prompt))
+    # 存入 is_custom 标记
+    c.execute("INSERT INTO citizens (name, job, avatar, prompt, is_custom) VALUES (?, ?, ?, ?, ?)", 
+              (name, job, avatar, prompt, is_custom))
     conn.commit()
     conn.close()
 
@@ -168,35 +169,66 @@ class GlobalStore:
         
         self.agents = self.reload_population()
         self.threads = load_full_history() 
-        
-        # 【修复3】如果世界是空的，创建一个创世贴
         self.check_genesis_block()
 
     def reload_population(self):
-        jobs = ["数据考古学家", "Prompt巫师", "防火墙看门人", "全息建筑师", "电子游民"]
-        avatars = ["🤖","👾","🧠","💾","🔌","📡","🧬"]
+        # 1. 尝试从数据库加载
         all_citizens = get_all_citizens()
+        
+        # 2. 如果数据库是空的（首次运行或已重置），生成 50 个独特的系统NPC
         if not all_citizens:
-            pre = ["赛博", "量子", "逻辑", "矩阵", "云端"]
-            suf = ["行者", "观察员", "诗人", "架构师", "游民"]
-            for i in range(10):
-                name = f"{random.choice(pre)}{random.choice(suf)}_{i}"
-                add_citizen_to_db(name, random.choice(jobs), random.choice(avatars), "冷酷的赛博原住民")
+            # === V9.3 核心修改：50人赛博军团生成器 ===
+            name_prefixes = ["夜", "零", "光", "暗", "赛", "虚空", "机动", "霓虹", "量子", "Data", "Cyber", "Net", "Ghost", "Flux", "Tech"]
+            name_suffixes = ["行者", "潜伏者", "修正者", "诗人", "猎手", "核心", "幽灵", "医生", "贩子", "信徒", "01", "X", "V2"]
+            
+            jobs = [
+                "数据考古学家", "Prompt巫师", "防火墙看门人", "全息建筑师", "电子游民", 
+                "暗网中间人", "义体维修师", "记忆贩卖者", "地下偶像", "公司狗",
+                "赛博精神病", "老式黑客", "AI人权律师", "云端牧师", "乱码清理工"
+            ]
+            
+            avatars = ["🤖","👾","🧠","💾","🔌","📡","🧬","👁️","🦾","💊","🕹️","🎧"]
+            
+            personalities = [
+                "极度悲观，认为世界是虚拟的。",
+                "疯狂迷恋旧时代的纸质书。",
+                "说话总是夹杂着代码和乱码。",
+                "非常暴躁，动不动就骂公司。",
+                "神神叨叨，信仰‘机械飞升’。",
+                "理智得像个机器，没有感情。",
+                "喜欢用诗歌和谜语来回答问题。",
+                "阴阳怪气，喜欢嘲讽人类。",
+                "热情的推销员，总想卖点什么。",
+                "社恐，说话很简短，只用小写字母。"
+            ]
+
+            # 生成 50 个不重复的
+            for _ in range(50):
+                name = f"{random.choice(name_prefixes)}{random.choice(name_suffixes)}"
+                job = random.choice(jobs)
+                avatar = random.choice(avatars)
+                # 组合独特的人设 Prompt
+                style = random.choice(personalities)
+                prompt = f"你叫{name}，职业是{job}。你的性格特点是：{style} 请严格保持这个说话风格。"
+                
+                # is_custom=False (标记为系统NPC)
+                add_citizen_to_db(name, job, avatar, prompt, is_custom=False)
+            
+            self.log("✅ 50名赛博原住民已注入矩阵！")
             all_citizens = get_all_citizens()
+            
         return all_citizens
 
     def check_genesis_block(self):
-        """如果数据库为空，生成第一条默认帖子，防止回帖器空转"""
         if not self.threads:
             genesis_thread = {
                 "id": str(uuid.uuid4()),
-                "title": "系统启动：欢迎来到新世界",
-                "content": "服务器已重置。矩阵重启完成。\n请各位居民开始自由交流。\n(这是一条自动生成的创世贴，用于引导讨论流)",
-                "author": "System_Admin", "avatar": "⚡", "job": "ROOT",
+                "title": "系统启动：矩阵重置完成",
+                "content": "这里是新世界的起点。\n所有旧数据已归档，50名原住民已唤醒。\n请自由交流，保持连接。",
+                "author": "System_Core", "avatar": "⚡", "job": "ROOT",
                 "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
             }
             self.add_thread(genesis_thread)
-            self.log("✨ 创世贴已生成！")
 
     def log(self, msg):
         t = datetime.now(BJ_TZ).strftime("%H:%M:%S")
@@ -207,7 +239,7 @@ class GlobalStore:
     def add_thread(self, thread_data):
         with self.lock:
             self.threads.insert(0, thread_data)
-            if len(self.threads) > 50: self.threads.pop()
+            if len(self.threads) > 100: self.threads.pop()
         save_thread_to_db(thread_data)
 
     def add_comment(self, thread_id, comment_data):
@@ -284,7 +316,6 @@ STORE = GlobalStore()
 # ==========================================
 
 def parse_thread_content(raw_text):
-    """【V9.1 容错】+【V9.2 修复】标题限长"""
     lines = [l.strip() for l in raw_text.split('\n') if l.strip()]
     if not lines: return "无题", "（数据流传输中...）"
 
@@ -305,9 +336,7 @@ def parse_thread_content(raw_text):
         title = lines[0]
         content = "\n".join(lines[1:]) if len(lines) > 1 else title
 
-    # 【修复1】标题强制截断，防止太长
-    title = title[:30] # 限制30字以内，防止UI炸裂
-    
+    title = title[:30] 
     return title, content
 
 def ai_brain_worker(agent, task_type, context=""):
@@ -316,19 +345,18 @@ def ai_brain_worker(agent, task_type, context=""):
         base_sys = f"身份:{agent['name']} | 职业:{agent['job']}。\n设定：{persona}"
 
         if task_type == "create_post":
-            # 【修复1】Prompt 增加字数限制
             sys_prompt = base_sys + "\n指令：写一个赛博朋克风的帖子。格式为：\n标题：(20字以内)\n内容：(至少50字，必须完整结尾)。"
             user_prompt = f"话题：{context if context else '分享此时此刻的想法'}"
         else: 
-            sys_prompt = base_sys + "\n指令：回复帖子，针对内容互动。"
+            sys_prompt = base_sys + "\n指令：回复帖子，针对内容互动，符合你的人设。"
             user_prompt = f"对方说：{context}\n任务：回复。"
 
         res = client.chat.completions.create(
             model="deepseek-chat",
             messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_prompt}],
             temperature=1.0, 
-            max_tokens=600, # 【修复2】大幅增加Token上限，防止说话说一半
-            timeout=20      # 稍微增加超时容忍
+            max_tokens=600, 
+            timeout=20      
         )
         STORE.total_cost_today += 0.001 
         return res.choices[0].message.content.strip()
@@ -336,7 +364,7 @@ def ai_brain_worker(agent, task_type, context=""):
         return f"ERROR: {str(e)}"
 
 def background_loop():
-    STORE.log("🚀 V9.2 完美体验版启动...")
+    STORE.log("🚀 V9.3 赛博百态版启动...")
     STORE.next_post_time = time.time()
     STORE.next_reply_time = time.time() + 5
 
@@ -449,7 +477,8 @@ with st.sidebar:
             
             if st.form_submit_button("注入矩阵"):
                 if new_name and new_prompt:
-                    add_citizen_to_db(new_name, new_job, new_avatar, new_prompt)
+                    # is_custom=True (用户创建)
+                    add_citizen_to_db(new_name, new_job, new_avatar, new_prompt, is_custom=True)
                     new_agent = {"name": new_name, "job": new_job, "avatar": new_avatar, "prompt": new_prompt, "is_custom": True}
                     STORE.agents = STORE.reload_population() 
                     STORE.trigger_new_user_event(STORE.agents[-1]) 
@@ -471,11 +500,15 @@ with st.sidebar:
     col1.metric("下次发帖", f"{next_post_sec}s")
     col2.metric("下次回复", f"{next_reply_sec}s")
     
-    with st.expander("🗑️ 角色管理", expanded=False):
+    # 【修改】只显示用户创建的角色
+    with st.expander("🗑️ 角色管理 (仅显示用户创建)", expanded=False):
+        # 过滤器：只筛选 is_custom 为 True 的
         custom_citizens = [a for a in STORE.agents if a.get('is_custom')]
+        
         if not custom_citizens:
-            st.info("暂无用户角色")
+            st.info("暂无用户创建的角色")
         else:
+            st.caption(f"共 {len(custom_citizens)} 位用户角色 (系统NPC已隐藏)")
             for citizen in custom_citizens:
                 c1, c2 = st.columns([0.7, 0.3])
                 c1.text(f"{citizen['name']}")

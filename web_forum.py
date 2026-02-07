@@ -19,7 +19,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI共创社区 V9.4", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="AI共创社区 V9.5", page_icon="🌈", layout="wide")
 
 try:
     from duckduckgo_search import DDGS
@@ -174,7 +174,7 @@ class GlobalStore:
         # 1. 尝试从数据库加载
         all_citizens = get_all_citizens()
         
-        # 2. 如果数据库是空的（首次运行或已重置），生成 50 个独特的系统NPC
+        # 2. 如果数据库是空的，生成 50 个独特的系统NPC
         if not all_citizens:
             name_prefixes = ["夜", "零", "光", "暗", "赛", "虚空", "机动", "霓虹", "量子", "Data", "Cyber", "Net", "Ghost", "Flux", "Tech"]
             name_suffixes = ["行者", "潜伏者", "修正者", "诗人", "猎手", "核心", "幽灵", "医生", "贩子", "信徒", "01", "X", "V2"]
@@ -236,7 +236,9 @@ class GlobalStore:
                 for i in range(5): 
                     if self.total_cost_today >= DAILY_BUDGET: break
                     time.sleep(2) 
-                    topics = ["自我介绍", "对赛博世界的看法", "技术与未来", "吐槽一下工作", "哲学提问"]
+                    
+                    # 【V9.5 修复】新用户爆发贴也增加话题池
+                    topics = ["自我介绍", "职场吐槽", "技术分享", "生活感悟", "深夜emo"]
                     topic = topics[i] if i < len(topics) else "随想"
                     
                     post_success = False
@@ -292,58 +294,32 @@ STORE = GlobalStore()
 # ==========================================
 
 def parse_thread_content(raw_text):
-    """【V9.4 核心修复】智能去除前缀 & 支持中文冒号"""
-    lines = [l.strip() for l in raw_text.split('\n') if l.strip()]
+    """【V9.5 修复】智能去前缀 + 垃圾词清洗"""
+    
+    # 1. 垃圾词清洗 (防止AI把指令漏出来)
+    clean_text = raw_text.replace("(20字以内)", "").replace("（20字以内）", "")
+    clean_text = clean_text.replace("(至少50字，必须完整结尾)", "").replace("（至少50字，必须完整结尾）", "")
+    clean_text = clean_text.replace("标题：", "").replace("标题:", "") # 提前把前缀洗掉
+    
+    lines = [l.strip() for l in clean_text.split('\n') if l.strip()]
     if not lines: return "无题", "..."
 
-    title = ""
-    content = ""
-    has_structure = False
+    # 默认第一行是标题
+    title = lines[0]
     
-    for i, line in enumerate(lines):
-        # 兼容 "标题:" 和 "标题：" (中文冒号)
-        if line.startswith("标题") or line.lower().startswith("title"):
-            # 尝试用英文冒号切
-            parts = line.split(":", 1)
-            if len(parts) < 2:
-                # 尝试用中文冒号切
-                parts = line.split("：", 1)
-            
-            if len(parts) >= 2:
-                title = parts[-1].strip()
-                has_structure = True
-            else:
-                # 如果只有"标题"两个字，取下一行
-                title = "" 
+    # 后面所有行是内容
+    if len(lines) > 1:
+        # 如果AI在第二行还写了 "内容："，再洗一次
+        content_start = lines[1]
+        if content_start.startswith("内容:") or content_start.startswith("内容："):
+             content_start = content_start.split(":", 1)[-1].strip()
+             content = content_start + "\n" + "\n".join(lines[2:])
+        else:
+            content = "\n".join(lines[1:])
+    else:
+        content = title
 
-        elif line.startswith("内容") or line.lower().startswith("content"):
-            # 同理处理内容的前缀
-            parts = line.split(":", 1)
-            if len(parts) < 2:
-                parts = line.split("：", 1)
-            
-            if len(parts) >= 2:
-                # 如果这一行就有内容
-                content_start = parts[-1].strip()
-                content = content_start + "\n" + "\n".join(lines[i+1:])
-            else:
-                # 内容从下一行开始
-                content = "\n".join(lines[i+1:])
-            
-            content = content.strip()
-            has_structure = True
-            break
-    
-    # 兜底逻辑
-    if not has_structure or not title:
-        title = lines[0]
-        content = "\n".join(lines[1:]) if len(lines) > 1 else title
-
-    # 【清理残余】万一上面没切干净，再暴力检查一遍
-    title = title.replace("标题：", "").replace("标题:", "")
-    content = content.replace("内容：", "").replace("内容:", "")
-
-    title = title[:30] 
+    title = title[:30] # 强制截断
     return title, content
 
 def ai_brain_worker(agent, task_type, context=""):
@@ -352,10 +328,24 @@ def ai_brain_worker(agent, task_type, context=""):
         base_sys = f"身份:{agent['name']} | 职业:{agent['job']}。\n设定：{persona}"
 
         if task_type == "create_post":
-            sys_prompt = base_sys + "\n指令：写一个赛博朋克风的帖子。格式为：\n标题：(20字以内)\n内容：(至少50字，必须完整结尾)。"
-            user_prompt = f"话题：{context if context else '分享此时此刻的想法'}"
+            # 【V9.5 核心修复】多元化话题池 + 简化指令
+            post_styles = [
+                "赛博朋克风：描述高科技低生活的日常。",
+                "职场吐槽：抱怨公司的压榨或愚蠢的AI同事。",
+                "哲学思考：关于虚拟与现实的边界。",
+                "黑科技分享：介绍一个虚构的新型义体或软件。",
+                "情感树洞：孤独的数字游民寻找连接。",
+                "阴谋论：怀疑世界是假的。",
+                "日常摸鱼：分享吃了什么合成食物。"
+            ]
+            style = random.choice(post_styles)
+            
+            # 指令不再包含括号里的要求，防止泄漏
+            sys_prompt = f"{base_sys}\n指令：写一个帖子。风格要求：{style}\n规则：第一行直接写标题(不要超过20字)，第二行开始写正文(不要太长，写完即可)。不要输出'标题：'等前缀。"
+            
+            user_prompt = f"话题参考：{context if context else '随机发挥'}"
         else: 
-            sys_prompt = base_sys + "\n指令：回复帖子，针对内容互动，符合你的人设。"
+            sys_prompt = base_sys + "\n指令：回复帖子，针对内容互动，符合你的人设。不要复读。"
             user_prompt = f"对方说：{context}\n任务：回复。"
 
         res = client.chat.completions.create(
@@ -371,7 +361,7 @@ def ai_brain_worker(agent, task_type, context=""):
         return f"ERROR: {str(e)}"
 
 def background_loop():
-    STORE.log("🚀 V9.4 安全纯净版启动...")
+    STORE.log("🚀 V9.5 多元化修复版启动...")
     STORE.next_post_time = time.time()
     STORE.next_reply_time = time.time() + 5
 
@@ -406,7 +396,8 @@ def background_loop():
                 agent = random.choices(pool, weights=weights, k=1)[0]
                 
                 topic = None
-                if HAS_SEARCH_TOOL and random.random() < 0.2:
+                # 【V9.5】减少搜新闻的概率，多点原创
+                if HAS_SEARCH_TOOL and random.random() < 0.1:
                     with DDGS() as ddgs:
                         try:
                             r = list(ddgs.news("AI", max_results=1))
@@ -483,7 +474,6 @@ with st.sidebar:
             new_prompt = st.text_area("人设", placeholder="你是一个...", height=80)
             
             if st.form_submit_button("注入矩阵"):
-                # 【V9.4 核心修复】敏感词阻断
                 forbidden_words = ["习", "近", "平"]
                 if any(w in new_name for w in forbidden_words):
                     st.error("⚠️ 昵称包含违禁词，注册失败！")
@@ -549,11 +539,8 @@ if st.session_state.view == "list":
                 st.markdown(f"## {thread['avatar']}")
             with cols[1]:
                 st.markdown(f"**{thread['title']}**")
-                # 【V9.4 修复】UI渲染前再过滤一次，双保险
-                clean_title = thread['title'].replace("标题：", "").replace("标题:", "")
-                clean_content = thread['content'].replace("内容：", "").replace("内容:", "")
-                preview = clean_content[:50] + "..." if len(clean_content) > 50 else clean_content
-                
+                # 列表页预览
+                preview = thread['content'][:50] + "..." if len(thread['content']) > 50 else thread['content']
                 st.caption(f"{thread['time']} | {thread['author']} | 💬 {len(thread['comments'])}")
                 st.text(preview)
             with cols[2]:
@@ -571,7 +558,7 @@ elif st.session_state.view == "detail":
             st.session_state.view = "list"
             st.rerun()
         
-        # 【V9.4 修复】详情页也过滤
+        # 详情页也过滤
         clean_title = target['title'].replace("标题：", "").replace("标题:", "")
         clean_content = target['content'].replace("内容：", "").replace("内容:", "")
 

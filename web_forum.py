@@ -19,7 +19,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI共创社区 V12.0 沉浸版", page_icon="✨", layout="wide")
+st.set_page_config(page_title="AI共创社区 V13.0 智能暂停版", page_icon="✨", layout="wide")
 
 try:
     from duckduckgo_search import DDGS
@@ -437,7 +437,7 @@ def ai_brain_worker(agent, task_type, context=""):
         return f"ERROR: {str(e)}"
 
 def background_loop():
-    STORE.log("🚀 V12.0 沉浸弹窗版启动...")
+    STORE.log("🚀 V13.0 智能暂停版启动...")
     STORE.next_post_time = time.time()
     STORE.next_reply_time = time.time() + 5
 
@@ -460,7 +460,6 @@ def background_loop():
                 post_interval = 1200 
                 mode_name = "🍵 节能"
 
-            # 【V12.0 调整】回帖频率改为发帖的3倍 (post / 3)
             reply_interval = post_interval / 3 
             STORE.current_mode = mode_name
 
@@ -542,37 +541,45 @@ if not any(t.name == "Cyber_V9" for t in threading.enumerate()):
     threading.Thread(target=background_loop, name="Cyber_V9", daemon=True).start()
 
 # ==========================================
-# 5. UI 渲染层 - 【V12.0 沉浸弹窗核心】
+# 5. UI 渲染层 - 【V13.0 智能暂停系统】
 # ==========================================
 
-if HAS_AUTOREFRESH:
+# 1. 状态锁初始化
+if "active_thread_id" not in st.session_state:
+    st.session_state.active_thread_id = None
+
+# 2. 只有当没有人在看贴时，才允许自动刷新！
+# 这句是核心：如果 active_thread_id 有值，st_autorefresh 根本不会运行
+if HAS_AUTOREFRESH and st.session_state.active_thread_id is None:
     count = st_autorefresh(interval=REFRESH_INTERVAL, limit=None, key="fizzbuzzcounter")
 
-# 【V12.0】 定义弹窗函数
+# 3. 定义弹窗函数 (强制模态)
 @st.dialog("📖 帖子详情", width="large")
 def view_thread_dialog(target):
-    # 顶部信息
     st.caption(f"{target['author']} · {target['job']} | {target['time']}")
     st.markdown(f"## {target['title'].replace('标题：', '').replace('标题:', '')}")
     
-    # 正文内容
     clean_content = target['content'].replace("内容：", "").replace("内容:", "")
     st.write(clean_content)
     
-    # 配图 (宽度500)
     if target.get('image_url'):
         st.image(target['image_url'], width=500)
     
     st.divider()
     
-    # 评论区
     st.markdown(f"#### 💬 评论 ({len(target['comments'])})")
     for comment in target['comments']:
         with st.chat_message(comment['name'], avatar=comment['avatar']):
             st.markdown(comment['content'])
             st.caption(f"{comment['time']} · {comment['job']}")
+    
+    st.divider()
+    # 【V13.0 关键】必须用这个按钮关闭，才能恢复自动刷新
+    if st.button("🚪 关闭并返回 (恢复刷新)", type="primary", use_container_width=True):
+        st.session_state.active_thread_id = None
+        st.rerun()
 
-# 侧边栏保持不变
+# 侧边栏
 with st.sidebar:
     st.title("🌐 赛博移民局")
     st.caption(f"模式: {STORE.current_mode} | 存档: 开启")
@@ -639,6 +646,23 @@ c1, c2 = st.columns([0.8, 0.2])
 c1.subheader("📡 实时信号流 (Live)")
 if c2.button("🔄", use_container_width=True): st.rerun()
 
+# 4. 如果处于阅读模式，直接尝试渲染弹窗
+# 注意：这块逻辑要在列表渲染之前或之后运行都可以，Streamlit 会自动处理弹窗层级
+if st.session_state.active_thread_id:
+    # 从内存中查找该帖子（因为可能被刷下去了，所以要在全局列表里找）
+    with STORE.lock:
+        # 尝试找到当前活跃的帖子
+        active_thread = next((t for t in STORE.threads if t['id'] == st.session_state.active_thread_id), None)
+    
+    if active_thread:
+        view_thread_dialog(active_thread)
+    else:
+        # 如果帖子找不到了（比如数据库被清空了），重置状态
+        st.warning("该帖子已在数据流中消失...")
+        st.session_state.active_thread_id = None
+        st.rerun()
+
+# 5. 渲染列表 (即使弹窗打开，背景也渲染列表，保持美观)
 with STORE.lock:
     threads_snapshot = list(STORE.threads)
 
@@ -660,6 +684,7 @@ for thread in threads_snapshot:
             if thread.get('image_url'):
                 st.image(thread['image_url'], use_column_width=True)
         with cols[3]:
-            # 【V12.0 修改】点击按钮直接调用弹窗函数
+            # 【V13.0 修改】点击按钮 -> 锁住状态 -> 刷新界面(触发弹窗)
             if st.button("👀", key=f"btn_{thread['id']}", use_container_width=True):
-                view_thread_dialog(thread)
+                st.session_state.active_thread_id = thread['id']
+                st.rerun()

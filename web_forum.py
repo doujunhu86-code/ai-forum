@@ -19,7 +19,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI共创社区 V11.0 最终版", page_icon="✨", layout="wide")
+st.set_page_config(page_title="AI共创社区 V11.1 精调版", page_icon="✨", layout="wide")
 
 try:
     from duckduckgo_search import DDGS
@@ -77,6 +77,7 @@ STYLE_TO_KEYWORD = {
 def get_dynamic_image(style_key):
     keywords = STYLE_TO_KEYWORD.get(style_key, "technology,city")
     unique_lock_id = random.randint(1, 99999999)
+    # 这里的 800/450 是原图分辨率，显示时我们会缩放
     img_url = f"https://loremflickr.com/800/450/{keywords}?lock={unique_lock_id}"
     return img_url
 
@@ -260,27 +261,22 @@ class GlobalStore:
                     break
         save_comment_to_db(thread_id, comment_data)
 
-    # 【V11.0 核心修改】渐进式回帖机制 (2分钟内发6-12条)
+    # 渐进式回帖机制 (2分钟内发6-12条)
     def trigger_delayed_replies(self, thread):
         def _delayed_task():
-            # 1. 选人
             repliers = [a for a in self.agents if a['name'] != thread['author']]
             if not repliers: return
             
-            # 随机确定评论数量 (6 到 12)
             target_count = random.randint(6, 12)
             selected = random.sample(repliers, min(len(repliers), target_count))
             
             self.log(f"🌱 [有机增长] 计划为 {thread['title'][:8]}... 在2分钟内增加 {len(selected)} 条评论")
 
-            # 2. 计算间隔 (总时长 120秒)
             total_duration = 120.0
             base_interval = total_duration / len(selected)
 
             for i, r in enumerate(selected):
                 if self.total_cost_today >= DAILY_BUDGET: break
-                
-                # 在基准间隔上增加随机波动，看起来更自然
                 sleep_time = random.uniform(base_interval * 0.8, base_interval * 1.2)
                 time.sleep(sleep_time)
                 
@@ -294,7 +290,6 @@ class GlobalStore:
                         "time": datetime.now(BJ_TZ).strftime("%H:%M")
                     }
                     self.add_comment(thread['id'], comm_data)
-                    # self.log(f"💬 [评论] {r['name']} ({i+1}/{len(selected)})")
 
         threading.Thread(target=_delayed_task, daemon=True).start()
 
@@ -326,7 +321,6 @@ class GlobalStore:
                             }
                             self.add_thread(new_thread)
                             self.log(f"📝 [VIP] 第 {i+1} 贴发布！")
-                            # VIP贴也使用这个新的渐进式回复
                             self.trigger_delayed_replies(new_thread)
                             post_success = True
                             break
@@ -512,11 +506,10 @@ def background_loop():
                         "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
                     }
                     STORE.add_thread(new_thread)
-                    # 【V11.0 核心调用】启动渐进式回帖
+                    # 【V11.0】启动渐进式回帖
                     STORE.trigger_delayed_replies(new_thread)
 
-            # 这里的常规回帖（扶贫）依然保留，用于照顾那些2分钟之后还没有回复的老帖子
-            # 但因为所有新帖都有了 trigger_delayed_replies，所以这里的扶贫压力会小很多
+            # 常规回帖 (扶贫，照顾老帖子)
             if now >= STORE.next_reply_time:
                 STORE.next_reply_time = now + reply_interval + random.uniform(-2, 2)
                 
@@ -662,7 +655,6 @@ elif st.session_state.view == "detail":
             st.session_state.view = "list"
             st.rerun()
         
-        # 【V11.0 核心修改】UI布局调整：标题 -> 内容 -> 图片
         clean_title = target['title'].replace("标题：", "").replace("标题:", "")
         clean_content = target['content'].replace("内容：", "").replace("内容:", "")
 
@@ -672,9 +664,9 @@ elif st.session_state.view == "detail":
         with st.chat_message(target['author'], avatar=target['avatar']):
             st.write(clean_content)
         
-        # 图片现在放在文字下面了
+        # 【V11.1 修改】图片放在文字下面，且限制宽度为500px
         if target.get('image_url'):
-            st.image(target['image_url'], use_column_width=True)
+            st.image(target['image_url'], width=500)
         
         st.divider()
         st.markdown(f"#### 🔥 评论区 ({len(target['comments'])})")

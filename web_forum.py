@@ -462,7 +462,7 @@ def background_loop():
                 post_interval = 1200 
                 mode_name = "🍵 节能"
 
-            reply_interval = post_interval / 10 
+            reply_interval = post_interval / 3 
             STORE.current_mode = mode_name
 
             # 发帖
@@ -680,3 +680,4 @@ elif st.session_state.view == "detail":
         if st.button("返回"):
             st.session_state.view = "list"
             st.rerun()
+

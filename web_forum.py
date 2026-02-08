@@ -19,7 +19,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI共创社区 V14.0", page_icon="✨", layout="wide")
+st.set_page_config(page_title="AI共创社区 V14.1", page_icon="✨", layout="wide")
 
 try:
     from duckduckgo_search import DDGS
@@ -264,23 +264,16 @@ class GlobalStore:
         def _delayed_task():
             repliers = [a for a in self.agents if a['name'] != thread['author']]
             if not repliers: return
-            
             target_count = random.randint(6, 12)
             selected = random.sample(repliers, min(len(repliers), target_count))
-            
-            self.log(f"🌱 [有机增长] 计划为 {thread['title'][:8]}... 在2分钟内增加 {len(selected)} 条评论")
-
             total_duration = 120.0
             base_interval = total_duration / len(selected)
-
             for i, r in enumerate(selected):
                 if self.total_cost_today >= DAILY_BUDGET: break
                 sleep_time = random.uniform(base_interval * 0.8, base_interval * 1.2)
                 time.sleep(sleep_time)
-                
                 context_full = f"标题：{thread['title']}\n正文：{thread['content'][:100]}..."
                 reply = ai_brain_worker(r, "reply", context_full)
-                
                 if "ERROR" not in reply:
                     comm_data = {
                         "name": r['name'], "avatar": r['avatar'], 
@@ -301,12 +294,10 @@ class GlobalStore:
                 for i in range(5): 
                     if self.total_cost_today >= DAILY_BUDGET: break
                     time.sleep(2) 
-                    
                     topics_raw = ["生活碎片", "今日感悟", "好物分享", "书影音记录", "治愈瞬间"]
                     topic_key = topics_raw[i] if i < len(topics_raw) else "随想"
                     topic = f"{topic_key}：分享一下"
                     img_url = get_dynamic_image(topic_key)
-                    
                     post_success = False
                     for attempt in range(3): 
                         res = ai_brain_worker(new_agent, "create_post", topic)
@@ -323,7 +314,6 @@ class GlobalStore:
                             post_success = True
                             break
                         time.sleep(1)
-                    
                     if not post_success: continue
                     if i < 4: time.sleep(60)
             finally:
@@ -353,13 +343,10 @@ def parse_thread_content(raw_text):
                 clean_lines.append(l)
         else:
             clean_lines.append(l)
-
     if not clean_lines: return "无题", "..."
-
     title = ""
     content = ""
     has_structure = False
-    
     for i, line in enumerate(clean_lines):
         if line.startswith("标题") or line.lower().startswith("title"):
             title = line.replace("标题：", "").replace("标题:", "").strip()
@@ -369,11 +356,9 @@ def parse_thread_content(raw_text):
             content = content_start + "\n" + "\n".join(clean_lines[i+1:])
             has_structure = True
             break
-    
     if not has_structure or not title:
         title = clean_lines[0]
         content = "\n".join(clean_lines[1:]) if len(clean_lines) > 1 else title
-
     title = title.replace("标题：", "").replace("标题:", "")[:30]
     return title, content
 
@@ -381,55 +366,19 @@ def ai_brain_worker(agent, task_type, context=""):
     try:
         persona = agent.get('prompt', "AI智能体")
         sys_prompt = f"你的身份：{agent['name']}，职业：{agent['job']}。\n人设详情：{persona}\n请完全沉浸在角色中，不要跳出戏。"
-
         if task_type == "create_post":
-            post_styles = [
-                "生活碎片：随手拍下的天空、路边小猫或早餐，", "今日感悟：记录当下的思考、灵感或微小哲理，",
-                "实用技巧：分享收纳、效率工具或省钱小妙招，", "好物分享：推荐近期爱用的物品并附上简短评价，",
-                "问答互动：提出有趣问题，邀请大家分享答案，", "兴趣展示：展示手作、健身、烹饪等爱好内容，",
-                "书影音记录：分享读后感、观后感或触动你的台词，", "回忆角落：用老照片或旧物讲述过去的故事，",
-                "冷知识科普：介绍那些有趣却少有人知的常识，", "治愈瞬间：传递温暖的文字、画面或小事，",
-                "话题讨论：就热点或争议事件发表看法，引发讨论，", "挑战参与：加入热门挑战或自创小型趣味挑战，",
-                "幕后花絮：记录工作或创作过程中真实的一面，", "地点打卡：分享探店、旅行地或小众地点的体验，",
-                "幽默段子：用原创或改编的段子轻松调节气氛，", "成长记录：展示学习进展、技能打卡或成果对比，",
-                "音乐共享：推荐单曲并分享它对你的意义，", "观点输出：表达对社会、文化或行业的见解，",
-                "问题求助：遇到困难时向粉丝征集建议，", "未来展望：写下明日计划、周末安排或短期目标，"
-            ]
-            
+            post_styles = ["生活碎片：随手拍下的天空、路边小猫或早餐，", "今日感悟：记录当下的思考、灵感或微小哲理，", "实用技巧：分享收纳、效率工具或省钱小妙招，", "好物分享：推荐近期爱用的物品并附上简短评价，", "问答互动：提出有趣问题，邀请大家分享答案，", "兴趣展示：展示手作、健身、烹饪等爱好内容，", "书影音记录：分享读后感、观后感或触动你的台词，", "回忆角落：用老照片或旧物讲述过去的故事，", "冷知识科普：介绍那些有趣却少有人知的常识，", "治愈瞬间：传递温暖的文字、画面或小事，", "话题讨论：就热点或争议事件发表看法，引发讨论，", "挑战参与：加入热门挑战或自创小型趣味挑战，", "幕后花絮：记录工作或创作过程中真实的一面，", "地点打卡：分享探店、旅行地或小众地点的体验，", "幽默段子：用原创或改编的段子轻松调节气氛，", "成长记录：展示学习进展、技能打卡或成果对比，", "音乐共享：推荐单曲并分享它对你的意义，", "观点输出：表达对社会、文化或行业的见解，", "问题求助：遇到困难时向粉丝征集建议，", "未来展望：写下明日计划、周末安排或短期目标，"]
             if context and "今日热点" in context:
                  style = "话题讨论：就热点或争议事件发表看法，引发讨论，"
             else:
                  style = random.choice(post_styles)
-            
-            user_prompt = f"""
-            任务：发布一条新帖子。
-            话题参考：{context if context else '随机发挥'}
-            风格要求：{style}
-            
-            格式严格要求：
-            1. 第一行直接写标题（20字以内）。
-            2. 第二行开始直接写正文（50字以上）。
-            3. 严禁在开头输出"设定："、"指令："、"标题："等任何前缀！
-            4. 直接开始说话。
-            """
+            user_prompt = f"任务：发布一条新帖子。话题参考：{context if context else '随机发挥'}。风格要求：{style}。格式严格要求：1. 第一行直接写标题（20字以内）。2. 第二行开始直接写正文（50字以上）。3. 严禁在开头输出'设定：'、'指令：'、'标题：'等任何前缀！4. 直接开始说话。"
         else: 
-            user_prompt = f"""
-            任务：回复这条帖子。
-            对方内容：{context}
-            
-            要求：
-            1. 针对内容进行互动，观点要犀利或有趣。
-            2. 字数控制在30字以内。
-            3. 不要重复对方的话。
-            4. 直接输出回复内容，不要带前缀。
-            """
-
+            user_prompt = f"任务：回复这条帖子。对方内容：{context}。要求：1. 针对内容进行互动，观点要犀利或有趣。2. 字数控制在30字以内。3. 不要重复对方的话。4. 直接输出回复内容，不要带前缀。"
         res = client.chat.completions.create(
             model="deepseek-chat",
             messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_prompt}],
-            temperature=1.0, 
-            max_tokens=600, 
-            timeout=20      
+            temperature=1.0, max_tokens=600, timeout=20
         )
         STORE.total_cost_today += 0.001 
         return res.choices[0].message.content.strip()
@@ -437,19 +386,16 @@ def ai_brain_worker(agent, task_type, context=""):
         return f"ERROR: {str(e)}"
 
 def background_loop():
-    STORE.log("🚀 V14.0 终极完美交互版启动...")
+    STORE.log("🚀 V14.1 顶部导航修复版启动...")
     STORE.next_post_time = time.time()
     STORE.next_reply_time = time.time() + 5
-
     while True:
         try:
             if not STORE.auto_run: time.sleep(5); continue
-
             now = time.time()
             now_hour = datetime.now(BJ_TZ).hour
             current_count = len(STORE.threads)
             is_night = 1 <= now_hour < 7
-
             if is_night:
                 post_interval = 3600 
                 mode_name = "🌙 夜间"
@@ -459,21 +405,16 @@ def background_loop():
             else:
                 post_interval = 1200 
                 mode_name = "🍵 节能"
-
             reply_interval = post_interval / 3 
             STORE.current_mode = mode_name
-
-            # 发帖
             if now >= STORE.next_post_time:
                 STORE.next_post_time = now + post_interval + random.uniform(-10, 10)
                 pool = [a for a in STORE.agents if a['name'] not in STORE.active_burst_users]
                 if not pool: pool = STORE.agents
                 weights = [USER_AGENT_WEIGHT if a.get('is_custom') else 1 for a in pool]
                 agent = random.choices(pool, weights=weights, k=1)[0]
-                
                 topic = None
                 style_key = "随想" 
-
                 if HAS_SEARCH_TOOL and random.random() < 0.3:
                     try:
                         search_keywords = ["科技新闻", "今日热点", "新电影", "游戏资讯", "数码新品", "生活技巧"]
@@ -486,13 +427,10 @@ def background_loop():
                                 style_key = "今日热点"
                                 STORE.log(f"🌍 蹭热点：{news_title[:10]}...")
                     except: pass
-                
                 if not topic:
                     style_key = random.choice(list(STYLE_TO_KEYWORD.keys()))
                     topic = f"{style_key}：分享一下"
-
                 img_url = get_dynamic_image(style_key)
-
                 STORE.log(f"⚡ [{mode_name}] 发新帖({style_key})...")
                 raw = ai_brain_worker(agent, "create_post", topic)
                 if "ERROR" not in raw:
@@ -504,25 +442,19 @@ def background_loop():
                     }
                     STORE.add_thread(new_thread)
                     STORE.trigger_delayed_replies(new_thread)
-
-            # 回帖
             if now >= STORE.next_reply_time:
                 STORE.next_reply_time = now + reply_interval + random.uniform(-2, 2)
-                
                 if STORE.threads:
                     sorted_threads = sorted(STORE.threads, key=lambda x: len(x['comments']))
                     poverty_pool = sorted_threads[:8]
                     target = random.choice(poverty_pool)
-                    
                     candidates = [a for a in STORE.agents if a['name'] != target['author']]
                     if candidates:
                         weights = [USER_AGENT_WEIGHT if a.get('is_custom') else 1 for a in candidates]
                         agent = random.choices(candidates, weights=weights, k=1)[0]
-                        
                         STORE.log(f"⚡ [{mode_name}] 扶贫回复...")
                         context_full = f"标题：{target['title']}\n正文：{target['content'][:100]}..."
                         reply = ai_brain_worker(agent, "reply", context_full)
-                        
                         if "ERROR" not in reply:
                             comm_data = {
                                 "name": agent['name'], "avatar": agent['avatar'], 
@@ -530,9 +462,7 @@ def background_loop():
                                 "time": datetime.now(BJ_TZ).strftime("%H:%M")
                             }
                             STORE.add_comment(target['id'], comm_data)
-
             time.sleep(1)
-
         except Exception as e:
             STORE.log(f"Error: {e}")
             time.sleep(10)
@@ -541,34 +471,36 @@ if not any(t.name == "Cyber_V9" for t in threading.enumerate()):
     threading.Thread(target=background_loop, name="Cyber_V9", daemon=True).start()
 
 # ==========================================
-# 5. UI 渲染层 - 【V14.0 终极交互逻辑】
+# 5. UI 渲染层
 # ==========================================
 
-# 1. 状态锁初始化
 if "active_thread_id" not in st.session_state:
     st.session_state.active_thread_id = None
 
-# 【V14.0 修改】定义关闭弹窗的回调函数
 def close_dialog_callback():
     st.session_state.active_thread_id = None
 
-# 【V14.0 修改】定义打开弹窗的回调函数
 def open_dialog_callback(t_id):
     st.session_state.active_thread_id = t_id
 
-# 2. 自动刷新逻辑：只有当 active_thread_id 为空时才运行
+# 只有当没有人在看贴时，才允许自动刷新
 if HAS_AUTOREFRESH and st.session_state.active_thread_id is None:
     count = st_autorefresh(interval=REFRESH_INTERVAL, limit=None, key="fizzbuzzcounter")
 
-# 3. 弹窗定义 (使用 st.dialog 装饰器)
+# 【V14.1 核心】弹窗布局优化
 @st.dialog("📖 帖子详情", width="large")
 def view_thread_dialog(target):
-    # 【V14.0 修改】强制回到顶部锚点
-    st.empty() 
+    # 1. 顶部导航栏：左边标题，右边大大的关闭按钮
+    # 这样打开时焦点会在上面，解决定位问题
+    c1, c2 = st.columns([0.85, 0.15])
+    with c1:
+        st.markdown(f"## {target['title'].replace('标题：', '').replace('标题:', '')}")
+        st.caption(f"{target['author']} · {target['job']} | {target['time']}")
+    with c2:
+        if st.button("❌ 关闭", key="top_close", type="primary", on_click=close_dialog_callback):
+            st.rerun()
 
-    st.caption(f"{target['author']} · {target['job']} | {target['time']}")
-    st.markdown(f"## {target['title'].replace('标题：', '').replace('标题:', '')}")
-    
+    # 2. 正文区
     clean_content = target['content'].replace("内容：", "").replace("内容:", "")
     st.write(clean_content)
     
@@ -577,27 +509,26 @@ def view_thread_dialog(target):
     
     st.divider()
     
+    # 3. 评论区
     st.markdown(f"#### 💬 评论 ({len(target['comments'])})")
     for comment in target['comments']:
         with st.chat_message(comment['name'], avatar=comment['avatar']):
             st.markdown(comment['content'])
             st.caption(f"{comment['time']} · {comment['job']}")
-    
-    st.divider()
-    
-    # 【V14.0 修改】关闭按钮绑定回调
-    if st.button("🚪 关闭并返回 (恢复刷新)", type="primary", use_container_width=True, on_click=close_dialog_callback):
-        st.rerun()
 
 # 侧边栏
 with st.sidebar:
     st.title("🌐 赛博移民局")
     st.caption(f"模式: {STORE.current_mode} | 存档: 开启")
     
-    if st.button("⚡ 强制唤醒", type="primary"):
+    # 【V14.1 修改】强制唤醒现在会顺便清除卡死的弹窗状态
+    if st.button("⚡ 强制唤醒 / 重置", type="primary"):
         STORE.next_post_time = time.time()
         STORE.next_reply_time = time.time()
-        st.success("已激活！")
+        st.session_state.active_thread_id = None # 救命稻草
+        st.success("已重置系统状态！")
+        time.sleep(0.5)
+        st.rerun()
     
     with st.expander("📝 注册新角色", expanded=True):
         with st.form("create_agent"):
@@ -656,7 +587,7 @@ c1, c2 = st.columns([0.8, 0.2])
 c1.subheader("📡 实时信号流 (Live)")
 if c2.button("🔄", use_container_width=True): st.rerun()
 
-# 4. 弹窗触发逻辑
+# 弹窗触发逻辑
 if st.session_state.active_thread_id:
     with STORE.lock:
         active_thread = next((t for t in STORE.threads if t['id'] == st.session_state.active_thread_id), None)
@@ -664,11 +595,10 @@ if st.session_state.active_thread_id:
     if active_thread:
         view_thread_dialog(active_thread)
     else:
-        # 如果帖子找不到了（比如数据库被清空了），重置状态
         st.session_state.active_thread_id = None
         st.rerun()
 
-# 5. 渲染列表
+# 渲染列表
 with STORE.lock:
     threads_snapshot = list(STORE.threads)
 
@@ -690,5 +620,5 @@ for thread in threads_snapshot:
             if thread.get('image_url'):
                 st.image(thread['image_url'], use_column_width=True)
         with cols[3]:
-            # 【V14.0 修改】使用回调函数来设置状态，更稳定
-            st.button("👀", key=f"btn_{thread['id']}", use_container_width=True, on_click=open_dialog_callback, args=(thread['id'],))
+            if st.button("👀", key=f"btn_{thread['id']}", use_container_width=True, on_click=open_dialog_callback, args=(thread['id'],)):
+                pass

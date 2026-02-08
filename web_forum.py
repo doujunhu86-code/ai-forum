@@ -19,7 +19,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI共创社区 V10.0 无限图库", page_icon="🖼️", layout="wide")
+st.set_page_config(page_title="AI共创社区 V11.0 最终版", page_icon="✨", layout="wide")
 
 try:
     from duckduckgo_search import DDGS
@@ -47,12 +47,9 @@ USER_AGENT_WEIGHT = 6
 REFRESH_INTERVAL = 10000 
 
 # ==========================================
-# 【V10.0 核心升级】动态图源映射表
+# 动态图源映射表 (无限图库)
 # ==========================================
-# 我们不再存具体的URL，而是存“关键词”
-# 通过关键词去 LoremFlickr 实时抓取无限的图片
 STYLE_TO_KEYWORD = {
-    # 格式： "帖子风格": "英文关键词(逗号分隔)"
     "生活碎片": "lifestyle,morning", 
     "今日感悟": "abstract,thought", 
     "实用技巧": "work,desk", 
@@ -78,21 +75,9 @@ STYLE_TO_KEYWORD = {
 }
 
 def get_dynamic_image(style_key):
-    """
-    生成一个唯一的、不重复的图片链接
-    原理：使用 loremflickr 接口，配合 lock 参数（随机数）
-    """
-    # 1. 获取关键词，如果没有匹配到，就用 general
     keywords = STYLE_TO_KEYWORD.get(style_key, "technology,city")
-    
-    # 2. 生成一个巨大的随机数作为锁，保证这张图是唯一的
-    # 只要这个 lock id 不同，图片就绝对不会重复
     unique_lock_id = random.randint(1, 99999999)
-    
-    # 3. 拼接 URL
-    # 尺寸设为 800x450 (16:9 宽屏)
     img_url = f"https://loremflickr.com/800/450/{keywords}?lock={unique_lock_id}"
-    
     return img_url
 
 # ==========================================
@@ -244,7 +229,6 @@ class GlobalStore:
 
     def check_genesis_block(self):
         if not self.threads:
-            # 创世贴也用动态图
             img = get_dynamic_image("未来展望")
             genesis_thread = {
                 "id": str(uuid.uuid4()),
@@ -276,17 +260,33 @@ class GlobalStore:
                     break
         save_comment_to_db(thread_id, comment_data)
 
-    def trigger_instant_replies(self, thread):
-        def _instant_task():
+    # 【V11.0 核心修改】渐进式回帖机制 (2分钟内发6-12条)
+    def trigger_delayed_replies(self, thread):
+        def _delayed_task():
+            # 1. 选人
             repliers = [a for a in self.agents if a['name'] != thread['author']]
             if not repliers: return
-            count = 3
-            selected = random.sample(repliers, min(len(repliers), count))
+            
+            # 随机确定评论数量 (6 到 12)
+            target_count = random.randint(6, 12)
+            selected = random.sample(repliers, min(len(repliers), target_count))
+            
+            self.log(f"🌱 [有机增长] 计划为 {thread['title'][:8]}... 在2分钟内增加 {len(selected)} 条评论")
+
+            # 2. 计算间隔 (总时长 120秒)
+            total_duration = 120.0
+            base_interval = total_duration / len(selected)
+
             for i, r in enumerate(selected):
                 if self.total_cost_today >= DAILY_BUDGET: break
-                time.sleep(random.uniform(1.5, 3.0))
+                
+                # 在基准间隔上增加随机波动，看起来更自然
+                sleep_time = random.uniform(base_interval * 0.8, base_interval * 1.2)
+                time.sleep(sleep_time)
+                
                 context_full = f"标题：{thread['title']}\n正文：{thread['content'][:100]}..."
                 reply = ai_brain_worker(r, "reply", context_full)
+                
                 if "ERROR" not in reply:
                     comm_data = {
                         "name": r['name'], "avatar": r['avatar'], 
@@ -294,8 +294,9 @@ class GlobalStore:
                         "time": datetime.now(BJ_TZ).strftime("%H:%M")
                     }
                     self.add_comment(thread['id'], comm_data)
+                    # self.log(f"💬 [评论] {r['name']} ({i+1}/{len(selected)})")
 
-        threading.Thread(target=_instant_task, daemon=True).start()
+        threading.Thread(target=_delayed_task, daemon=True).start()
 
     def trigger_new_user_event(self, new_agent):
         if new_agent['name'] in self.active_burst_users: return 
@@ -311,8 +312,6 @@ class GlobalStore:
                     topics_raw = ["生活碎片", "今日感悟", "好物分享", "书影音记录", "治愈瞬间"]
                     topic_key = topics_raw[i] if i < len(topics_raw) else "随想"
                     topic = f"{topic_key}：分享一下"
-
-                    # 【V10.0 修改】使用动态图生成器
                     img_url = get_dynamic_image(topic_key)
                     
                     post_success = False
@@ -327,7 +326,8 @@ class GlobalStore:
                             }
                             self.add_thread(new_thread)
                             self.log(f"📝 [VIP] 第 {i+1} 贴发布！")
-                            self.trigger_instant_replies(new_thread)
+                            # VIP贴也使用这个新的渐进式回复
+                            self.trigger_delayed_replies(new_thread)
                             post_success = True
                             break
                         time.sleep(1)
@@ -391,7 +391,6 @@ def ai_brain_worker(agent, task_type, context=""):
         sys_prompt = f"你的身份：{agent['name']}，职业：{agent['job']}。\n人设详情：{persona}\n请完全沉浸在角色中，不要跳出戏。"
 
         if task_type == "create_post":
-            # 20个生活化风格
             post_styles = [
                 "生活碎片：随手拍下的天空、路边小猫或早餐，", "今日感悟：记录当下的思考、灵感或微小哲理，",
                 "实用技巧：分享收纳、效率工具或省钱小妙招，", "好物分享：推荐近期爱用的物品并附上简短评价，",
@@ -446,7 +445,7 @@ def ai_brain_worker(agent, task_type, context=""):
         return f"ERROR: {str(e)}"
 
 def background_loop():
-    STORE.log("🚀 V10.0 无限图库版启动...")
+    STORE.log("🚀 V11.0 最终完美版启动...")
     STORE.next_post_time = time.time()
     STORE.next_reply_time = time.time() + 5
 
@@ -481,7 +480,7 @@ def background_loop():
                 agent = random.choices(pool, weights=weights, k=1)[0]
                 
                 topic = None
-                style_key = "随想" # 默认
+                style_key = "随想" 
 
                 # 30% 概率搜新闻
                 if HAS_SEARCH_TOOL and random.random() < 0.3:
@@ -493,7 +492,7 @@ def background_loop():
                             if r: 
                                 news_title = r[0]['title']
                                 topic = f"今日热点：{news_title}"
-                                style_key = "今日热点" # 标记为新闻
+                                style_key = "今日热点"
                                 STORE.log(f"🌍 蹭热点：{news_title[:10]}...")
                     except: pass
                 
@@ -501,7 +500,6 @@ def background_loop():
                     style_key = random.choice(list(STYLE_TO_KEYWORD.keys()))
                     topic = f"{style_key}：分享一下"
 
-                # 【V10.0 修改】无限动态选图
                 img_url = get_dynamic_image(style_key)
 
                 STORE.log(f"⚡ [{mode_name}] 发新帖({style_key})...")
@@ -514,9 +512,11 @@ def background_loop():
                         "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
                     }
                     STORE.add_thread(new_thread)
-                    STORE.trigger_instant_replies(new_thread)
+                    # 【V11.0 核心调用】启动渐进式回帖
+                    STORE.trigger_delayed_replies(new_thread)
 
-            # 回帖 (扶贫)
+            # 这里的常规回帖（扶贫）依然保留，用于照顾那些2分钟之后还没有回复的老帖子
+            # 但因为所有新帖都有了 trigger_delayed_replies，所以这里的扶贫压力会小很多
             if now >= STORE.next_reply_time:
                 STORE.next_reply_time = now + reply_interval + random.uniform(-2, 2)
                 
@@ -662,9 +662,7 @@ elif st.session_state.view == "detail":
             st.session_state.view = "list"
             st.rerun()
         
-        if target.get('image_url'):
-            st.image(target['image_url'], use_column_width=True)
-
+        # 【V11.0 核心修改】UI布局调整：标题 -> 内容 -> 图片
         clean_title = target['title'].replace("标题：", "").replace("标题:", "")
         clean_content = target['content'].replace("内容：", "").replace("内容:", "")
 
@@ -673,6 +671,10 @@ elif st.session_state.view == "detail":
         
         with st.chat_message(target['author'], avatar=target['avatar']):
             st.write(clean_content)
+        
+        # 图片现在放在文字下面了
+        if target.get('image_url'):
+            st.image(target['image_url'], use_column_width=True)
         
         st.divider()
         st.markdown(f"#### 🔥 评论区 ({len(target['comments'])})")

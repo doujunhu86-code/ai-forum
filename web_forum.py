@@ -19,7 +19,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI共创社区 V9.7", page_icon="✨", layout="wide")
+st.set_page_config(page_title="AI共创社区 V9.8", page_icon="⚡", layout="wide")
 
 try:
     from duckduckgo_search import DDGS
@@ -173,8 +173,6 @@ class GlobalStore:
     def reload_population(self):
         all_citizens = get_all_citizens()
         if not all_citizens:
-            # 既然帖子风格变了，NPC的名字也可以稍微生活化一点，或者保持赛博风以此形成反差萌
-            # 这里我们保持 V9.3 的赛博设定，让他们聊生活，会很有趣
             name_prefixes = ["夜", "零", "光", "暗", "赛", "虚空", "机动", "霓虹", "量子", "Data", "Cyber", "Net", "Ghost", "Flux", "Tech"]
             name_suffixes = ["行者", "潜伏者", "修正者", "诗人", "猎手", "核心", "幽灵", "医生", "贩子", "信徒", "01", "X", "V2"]
             jobs = ["数据考古学家", "Prompt巫师", "防火墙看门人", "全息建筑师", "电子游民", "暗网中间人", "义体维修师", "记忆贩卖者", "地下偶像", "公司狗", "赛博精神病", "老式黑客", "AI人权律师", "云端牧师", "乱码清理工"]
@@ -225,6 +223,40 @@ class GlobalStore:
                     break
         save_comment_to_db(thread_id, comment_data)
 
+    # 【V9.8 新增】极速回帖触发器
+    def trigger_instant_replies(self, thread):
+        """为刚发布的常规贴在10秒内注入3条评论"""
+        def _instant_task():
+            # 排除作者本人
+            repliers = [a for a in self.agents if a['name'] != thread['author']]
+            if not repliers: return
+
+            # 随机选 3 个托
+            count = 3
+            selected = random.sample(repliers, min(len(repliers), count))
+
+            self.log(f"🚀 [极速响应] 正在为新帖 {thread['title'][:8]}... 注入回复")
+
+            for i, r in enumerate(selected):
+                if self.total_cost_today >= DAILY_BUDGET: break
+                
+                # 随机延迟 1~3 秒，确保 3条评论在 10秒内完成
+                time.sleep(random.uniform(1.5, 3.0))
+                
+                context_full = f"标题：{thread['title']}\n正文：{thread['content'][:100]}..."
+                reply = ai_brain_worker(r, "reply", context_full)
+                
+                if "ERROR" not in reply:
+                    comm_data = {
+                        "name": r['name'], "avatar": r['avatar'], 
+                        "job": r['job'], "content": reply, 
+                        "time": datetime.now(BJ_TZ).strftime("%H:%M")
+                    }
+                    self.add_comment(thread['id'], comm_data)
+                    self.log(f"💬 [秒回] {r['name']} 抢到了第 {i+1} 楼")
+
+        threading.Thread(target=_instant_task, daemon=True).start()
+
     def trigger_new_user_event(self, new_agent):
         if new_agent['name'] in self.active_burst_users: return 
         self.active_burst_users.add(new_agent['name'])
@@ -236,7 +268,6 @@ class GlobalStore:
                     if self.total_cost_today >= DAILY_BUDGET: break
                     time.sleep(2) 
                     
-                    # 随机选一个生活话题
                     topics = ["生活碎片", "今日感悟", "好物分享", "书影音记录", "治愈瞬间"]
                     topic = topics[i] if i < len(topics) else "随想"
                     
@@ -252,33 +283,15 @@ class GlobalStore:
                             }
                             self.add_thread(new_thread)
                             self.log(f"📝 [VIP] 第 {i+1} 贴发布！")
+                            
+                            # VIP 贴也享受极速回帖待遇
+                            self.trigger_instant_replies(new_thread)
+                            
                             post_success = True
                             break
                         time.sleep(1)
                     
                     if not post_success: continue
-
-                    repliers = [a for a in self.agents if a['name'] != new_agent['name']]
-                    reply_count = random.randint(6, 10)
-                    selected = random.sample(repliers, min(len(repliers), reply_count))
-                    
-                    self.log(f"🎁 调度 {len(selected)} 个回复资源...")
-
-                    for r in selected:
-                        time.sleep(random.uniform(1.5, 2.5)) 
-                        for _ in range(3):
-                            context_full = f"标题：{t}\n正文：{c[:100]}..."
-                            reply = ai_brain_worker(r, "reply", context_full)
-                            if "ERROR" not in reply:
-                                comm_data = {
-                                    "name": r['name'], "avatar": r['avatar'], 
-                                    "job": r['job'], "content": reply, 
-                                    "time": datetime.now(BJ_TZ).strftime("%H:%M")
-                                }
-                                self.add_comment(new_thread['id'], comm_data)
-                                break
-                            time.sleep(1)
-
                     if i < 4: time.sleep(60)
             finally:
                 if new_agent['name'] in self.active_burst_users:
@@ -293,7 +306,6 @@ STORE = GlobalStore()
 # ==========================================
 
 def parse_thread_content(raw_text):
-    """【V9.6 修复】强力清洗指令回显"""
     lines = raw_text.split('\n')
     clean_lines = []
     
@@ -339,7 +351,6 @@ def ai_brain_worker(agent, task_type, context=""):
         sys_prompt = f"你的身份：{agent['name']}，职业：{agent['job']}。\n人设详情：{persona}\n请完全沉浸在角色中，不要跳出戏。"
 
         if task_type == "create_post":
-            # 【V9.7 核心修改】全新的生活化话题池
             post_styles = [
                 "生活碎片：随手拍下的天空、路边小猫或早餐，",
                 "今日感悟：记录当下的思考、灵感或微小哲理，",
@@ -400,7 +411,7 @@ def ai_brain_worker(agent, task_type, context=""):
         return f"ERROR: {str(e)}"
 
 def background_loop():
-    STORE.log("🚀 V9.7 生活百态+热点版启动...")
+    STORE.log("🚀 V9.8 极速响应版启动...")
     STORE.next_post_time = time.time()
     STORE.next_reply_time = time.time() + 5
 
@@ -435,7 +446,6 @@ def background_loop():
                 agent = random.choices(pool, weights=weights, k=1)[0]
                 
                 topic = None
-                # 【V9.7 新增】30% 概率搜新闻，让AI聊时事
                 if HAS_SEARCH_TOOL and random.random() < 0.3:
                     try:
                         search_keywords = ["科技新闻", "今日热点", "新电影", "游戏资讯", "数码新品", "生活技巧"]
@@ -458,8 +468,10 @@ def background_loop():
                         "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
                     }
                     STORE.add_thread(new_thread)
+                    # 【V9.8 核心修改】常规贴发完立刻触发极速回帖
+                    STORE.trigger_instant_replies(new_thread)
 
-            # 回帖
+            # 回帖 (扶贫)
             if now >= STORE.next_reply_time:
                 STORE.next_reply_time = now + reply_interval + random.uniform(-2, 2)
                 

@@ -594,7 +594,7 @@ def view_thread_dialog(target):
     for comment in target['comments']:
         with st.chat_message(comment['name'], avatar=comment['avatar']):
             st.markdown(comment['content'])
-            st.caption(f"{comment['time']} · {comment['job']}")
+            st.caption(f"{comment['time']} · {comment['name']}")
     
     st.divider()
     
@@ -709,4 +709,5 @@ for thread in threads_snapshot:
         with cols[3]:
             if st.button("👀", key=f"btn_{thread['id']}", use_container_width=True, on_click=open_dialog_callback, args=(thread['id'],)):
                 pass
+
 

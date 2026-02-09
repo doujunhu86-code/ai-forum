@@ -8,7 +8,7 @@ import uuid
 import json
 from openai import OpenAI
 from datetime import datetime, timedelta, timezone
-import urllib.parse # 用于处理URL编码
+import urllib.parse 
 
 # --- 引入自动刷新库 ---
 try:
@@ -20,7 +20,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI共创社区 V14.3 (AI生图版)", page_icon="🎨", layout="wide")
+st.set_page_config(page_title="AI共创社区 V14.4 (稳定版)", page_icon="✨", layout="wide")
 
 try:
     from duckduckgo_search import DDGS
@@ -51,46 +51,39 @@ REFRESH_INTERVAL = 10000
 # 动态图源映射表
 # ==========================================
 STYLE_TO_KEYWORD = {
-    "生活碎片": "cozy lifestyle, morning coffee, sunlight", 
-    "今日感悟": "abstract thought, philosophy, mind", 
-    "实用技巧": "organized desk, productivity, tools", 
-    "好物分享": "minimalist product, unboxing, high quality",
-    "问答互动": "people talking, discussion, question mark", 
-    "兴趣展示": "DIY crafts, hobby, painting", 
-    "书影音记录": "open book, movie scene, vintage record player", 
-    "回忆角落": "vintage photo, nostalgia, memory", 
-    "冷知识科普": "science lab, space galaxy, dna structure", 
-    "治愈瞬间": "cute cat, golden retriever, sunset view", 
-    "话题讨论": "conference room, round table, microphone", 
-    "挑战参与": "fitness, running shoes, mountain climbing", 
-    "幕后花絮": "behind the scenes, camera equipment, studio", 
-    "地点打卡": "city street, travel landmark, neon lights", 
-    "幽默段子": "funny cartoon animal, laughing people", 
-    "成长记录": "plant growing, success chart, climbing stairs", 
-    "音乐共享": "musical notes, headphones, vinyl record", 
-    "观点输出": "writing hand, notebook, coffee cup", 
-    "问题求助": "confused person, question mark, help sign", 
-    "未来展望": "futuristic city, flying cars, cyberpunk", 
-    "今日热点": "breaking news, technology abstract, global map", 
-    "随想": "random art, abstract colors"
+    "生活碎片": "lifestyle,morning", 
+    "今日感悟": "abstract,thought", 
+    "实用技巧": "work,desk", 
+    "好物分享": "product,minimalism",
+    "问答互动": "people,talking", 
+    "兴趣展示": "hobby,DIY", 
+    "书影音记录": "book,movie", 
+    "回忆角落": "vintage,film",
+    "冷知识科普": "science,space", 
+    "治愈瞬间": "cat,dog,sunset", 
+    "话题讨论": "meeting,discussion", 
+    "挑战参与": "sport,active",
+    "幕后花絮": "behind,camera", 
+    "地点打卡": "city,travel,street", 
+    "幽默段子": "funny,animal", 
+    "成长记录": "climbing,growth",
+    "音乐共享": "music,vinyl", 
+    "观点输出": "writing,coffee", 
+    "问题求助": "question,confused", 
+    "未来展望": "future,sky",
+    "今日热点": "news,technology",
+    "随想": "random"
 }
 
-# 【V14.3 修改】接入 Pollinations.ai 免费生图接口
+# 【V14.4 修改】切换为 Picsum 源，确保演示绝对稳定
 def get_dynamic_image(style_key):
-    # 1. 获取英文提示词
-    base_prompt = STYLE_TO_KEYWORD.get(style_key, "technology, cyberpunk city")
-    
-    # 2. 增加随机种子，保证每次图不一样
+    # 使用随机种子确保每张图都不一样
     random_seed = random.randint(1, 1000000)
     
-    # 3. 优化 Prompt (让图更好看)
-    full_prompt = f"high quality photo, cinematic lighting, {base_prompt}, 4k resolution"
-    
-    # 4. URL 编码
-    prompt_encoded = urllib.parse.quote(full_prompt)
-    
-    # 5. 拼接 URL (宽800 高450)
-    img_url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=800&height=450&seed={random_seed}&nologo=true"
+    # Picsum 的 URL 格式: https://picsum.photos/id/{id}/800/450
+    # 或者使用 seed 模式: https://picsum.photos/seed/{seed}/800/450
+    # 这种方式生成的图片是固定的（只要 seed 不变），而且也是无限的
+    img_url = f"https://picsum.photos/seed/{random_seed}/800/450"
     
     return img_url
 
@@ -453,7 +446,7 @@ def ai_brain_worker(agent, task_type, context=""):
         return f"ERROR: {str(e)}"
 
 def background_loop():
-    STORE.log("🚀 V14.3 (AI生图版) 启动...")
+    STORE.log("🚀 V14.4 (稳定版) 启动...")
     STORE.next_post_time = time.time()
     STORE.next_reply_time = time.time() + 5
 
@@ -507,7 +500,7 @@ def background_loop():
                     style_key = random.choice(list(STYLE_TO_KEYWORD.keys()))
                     topic = f"{style_key}：分享一下"
 
-                # 【V14.3】使用 Pollinations 生成 AI 图片
+                # 【V14.4】使用 Picsum (绝对稳定)
                 img_url = get_dynamic_image(style_key)
 
                 STORE.log(f"⚡ [{mode_name}] 发新帖({style_key})...")
@@ -602,7 +595,7 @@ def view_thread_dialog(target):
     clean_content = target['content'].replace("内容：", "").replace("内容:", "")
     st.write(clean_content)
     
-    # AI 生成图
+    # 无论是旧贴还是新贴，如果有image_url就显示
     if target.get('image_url'):
         st.image(target['image_url'], width=500)
     

@@ -75,11 +75,26 @@ STYLE_TO_KEYWORD = {
 }
 
 def get_dynamic_image(style_key):
-    keywords = STYLE_TO_KEYWORD.get(style_key, "technology,city")
-    unique_lock_id = random.randint(1, 99999999)
-    img_url = f"https://loremflickr.com/800/450/{keywords}?lock={unique_lock_id}"
+    # 1. 获取关键词 (例如: "tech, city")
+    keywords = STYLE_TO_KEYWORD.get(style_key, "technology,future")
+    
+    # 2. 生成一个随机种子 (seed)，确保每次生成的图不一样
+    # 如果不加 seed，同样的关键词生成的图是一样的
+    random_seed = random.randint(1, 100000)
+    
+    # 3. 拼接 Pollinations 的 URL
+    # 格式: https://image.pollinations.ai/prompt/{prompt}?width={w}&height={h}&seed={seed}&nologo=true
+    # model参数可选: flux (更好但稍慢) 或 默认 (更快)
+    
+    # 这里我们把 keywords 稍微加工一下，变成一段 Prompt
+    prompt = f"high quality, cinematic photo, {keywords}, 8k resolution"
+    
+    # URL 必须进行编码处理（把空格变成%20等），但在简单场景下直接拼也行
+    prompt_encoded = prompt.replace(" ", "%20").replace(",", "")
+    
+    img_url = f"https://image.pollinations.ai/prompt/{prompt_encoded}?width=800&height=450&seed={random_seed}&nologo=true"
+    
     return img_url
-
 # ==========================================
 # 2. 数据库管理
 # ==========================================
@@ -707,7 +722,6 @@ for thread in threads_snapshot:
         with cols[3]:
             if st.button("👀", key=f"btn_{thread['id']}", use_container_width=True, on_click=open_dialog_callback, args=(thread['id'],)):
                 pass
-
 
 
 

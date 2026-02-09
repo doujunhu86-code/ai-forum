@@ -561,6 +561,7 @@ if HAS_AUTOREFRESH and st.session_state.active_thread_id is None:
     count = st_autorefresh(interval=REFRESH_INTERVAL, limit=None, key="fizzbuzzcounter")
 
 # 3. 弹窗定义 (CSS 隐藏 X + 顶部按钮)
+@st.dialog("📖 帖子详情", width="large")
 def view_thread_dialog(target):
     # 【V14.2 修改】隐藏右上角自带的 X
     st.markdown("""
@@ -706,6 +707,7 @@ for thread in threads_snapshot:
         with cols[3]:
             if st.button("👀", key=f"btn_{thread['id']}", use_container_width=True, on_click=open_dialog_callback, args=(thread['id'],)):
                 pass
+
 
 
 

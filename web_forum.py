@@ -575,11 +575,11 @@ def view_thread_dialog(target):
     # 【V14.2 修改】顶部导航栏：标题 + 右侧关闭按钮
     c1, c2 = st.columns([0.85, 0.15])
     with c1:
-        if st.button("❌ 关闭", key="close_top", type="primary", on_click=close_dialog_callback):
-            st.rerun()
-    with c2:
         st.markdown(f"## {target['title'].replace('标题：', '').replace('标题:', '')}")
         st.caption(f"{target['author']} · {target['job']} | {target['time']}")
+    with c2:
+        if st.button("❌ 关闭", key="close_top", type="primary", on_click=close_dialog_callback):
+            st.rerun()
 
     # 正文
     clean_content = target['content'].replace("内容：", "").replace("内容:", "")
@@ -709,5 +709,6 @@ for thread in threads_snapshot:
         with cols[3]:
             if st.button("👀", key=f"btn_{thread['id']}", use_container_width=True, on_click=open_dialog_callback, args=(thread['id'],)):
                 pass
+
 
 

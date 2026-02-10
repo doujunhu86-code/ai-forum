@@ -20,7 +20,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI共创社区 V14.4 (稳定版)", page_icon="✨", layout="wide")
+st.set_page_config(page_title="AI共创社区 V14.5 (2026适配版)", page_icon="✨", layout="wide")
 
 try:
     from duckduckgo_search import DDGS
@@ -75,16 +75,10 @@ STYLE_TO_KEYWORD = {
     "随想": "random"
 }
 
-# 【V14.4 修改】切换为 Picsum 源，确保演示绝对稳定
 def get_dynamic_image(style_key):
-    # 使用随机种子确保每张图都不一样
+    # 使用 Picsum 确保稳定
     random_seed = random.randint(1, 1000000)
-    
-    # Picsum 的 URL 格式: https://picsum.photos/id/{id}/800/450
-    # 或者使用 seed 模式: https://picsum.photos/seed/{seed}/800/450
-    # 这种方式生成的图片是固定的（只要 seed 不变），而且也是无限的
     img_url = f"https://picsum.photos/seed/{random_seed}/800/450"
-    
     return img_url
 
 # ==========================================
@@ -257,7 +251,6 @@ class GlobalStore:
     def add_thread(self, thread_data):
         with self.lock:
             self.threads.insert(0, thread_data)
-            # 列表上限设为 100
             if len(self.threads) > 100: self.threads.pop()
         save_thread_to_db(thread_data)
 
@@ -446,7 +439,7 @@ def ai_brain_worker(agent, task_type, context=""):
         return f"ERROR: {str(e)}"
 
 def background_loop():
-    STORE.log("🚀 V14.4 (稳定版) 启动...")
+    STORE.log("🚀 V14.5 (2026适配版) 启动...")
     STORE.next_post_time = time.time()
     STORE.next_reply_time = time.time() + 5
 
@@ -573,7 +566,7 @@ if HAS_AUTOREFRESH and st.session_state.active_thread_id is None:
 # 3. 弹窗定义 (CSS 隐藏 X + 顶部按钮)
 @st.dialog("📖 帖子详情", width="large")
 def view_thread_dialog(target):
-    # 【V14.2 修改】隐藏右上角自带的 X
+    # 隐藏右上角自带的 X
     st.markdown("""
     <style>
     [data-testid="stDialog"] button[aria-label="Close"] {
@@ -582,7 +575,7 @@ def view_thread_dialog(target):
     </style>
     """, unsafe_allow_html=True)
 
-    # 【V14.2 修改】顶部导航栏：标题 + 右侧关闭按钮
+    # 顶部导航栏：标题 + 右侧关闭按钮
     c1, c2 = st.columns([0.85, 0.15])
     with c1:
         st.markdown(f"## {target['title'].replace('标题：', '').replace('标题:', '')}")
@@ -610,7 +603,8 @@ def view_thread_dialog(target):
     st.divider()
     
     # 底部按钮
-    if st.button("🚪 关闭并返回", key="close_bottom", type="primary", use_container_width=True, on_click=close_dialog_callback):
+    # 【V14.5 修改】use_container_width -> width="stretch"
+    if st.button("🚪 关闭并返回", key="close_bottom", type="primary", width="stretch", on_click=close_dialog_callback):
         st.rerun()
 
 # 侧边栏
@@ -618,7 +612,7 @@ with st.sidebar:
     st.title("🌐 赛博移民局")
     st.caption(f"模式: {STORE.current_mode} | 存档: 开启")
     
-    # 【V14.2 修改】侧边栏还原为普通唤醒
+    # 侧边栏还原为普通唤醒
     if st.button("⚡ 强制唤醒", type="primary"):
         STORE.next_post_time = time.time()
         STORE.next_reply_time = time.time()
@@ -680,8 +674,9 @@ with st.sidebar:
 c1, c2 = st.columns([0.8, 0.2])
 c1.subheader("📡 实时信号流 (Live)")
 
-# 【V14.2 修改】刷新按钮兼具“重置状态”功能
-if c2.button("🔄 刷新帖子", use_container_width=True):
+# 刷新按钮兼具“重置状态”功能
+# 【V14.5 修改】use_container_width -> width="stretch"
+if c2.button("🔄 刷新帖子", width="stretch"):
     st.session_state.active_thread_id = None
     st.rerun()
 
@@ -716,8 +711,10 @@ for thread in threads_snapshot:
             st.text(preview)
         with cols[2]:
             if thread.get('image_url'):
-                st.image(thread['image_url'], use_column_width=True)
+                # 【V14.5 修改】use_column_width -> width="stretch"
+                st.image(thread['image_url'], width="stretch")
         with cols[3]:
             # 回调函数
-            if st.button("👀", key=f"btn_{thread['id']}", use_container_width=True, on_click=open_dialog_callback, args=(thread['id'],)):
+            # 【V14.5 修改】use_container_width -> width="stretch"
+            if st.button("👀", key=f"btn_{thread['id']}", width="stretch", on_click=open_dialog_callback, args=(thread['id'],)):
                 pass

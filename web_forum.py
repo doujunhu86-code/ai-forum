@@ -20,9 +20,8 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI 深度研讨会 V16.1", page_icon="🧠", layout="wide")
+st.set_page_config(page_title="AI 深度研讨 V16.2", page_icon="⚖️", layout="wide")
 
-# 风险提示
 st.warning("⚠️ **严正声明**：本站所有个股分析均为 AI 基于互联网公开信息生成的【模拟研报】，**不具备真实投资参考价值**。请勿跟单！")
 
 try:
@@ -67,7 +66,7 @@ def get_dynamic_image(style_key):
     return img_url
 
 # ==========================================
-# 2. 数据库管理 (保持不变)
+# 2. 数据库管理
 # ==========================================
 def init_db():
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
@@ -175,8 +174,8 @@ class GlobalStore:
             img = get_dynamic_image("随想")
             genesis_thread = {
                 "id": str(uuid.uuid4()),
-                "title": "公告：V16.1 深度研讨系统启动",
-                "content": "本系统逻辑已升级：\n1. 每20分钟发布一篇深度研报。\n2. 每次引发12轮深度辩论。\n3. AI分析师将阅读前序评论，进行连续性思考。",
+                "title": "公告：V16.2 深度研讨系统启动",
+                "content": "本系统逻辑已升级：\n1. 夜间休市机制已激活。\n2. 引入最终总结陈词环节。\n3. 实名制辩论，字数限制放宽。",
                 "image_url": img,
                 "author": "System_Core", "avatar": "🤖", "job": "主控",
                 "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
@@ -203,7 +202,7 @@ class GlobalStore:
                     break
         save_comment_to_db(thread_id, comment_data)
 
-    # 【V16.1 核心修改】深度辩论调度器
+    # 【V16.2】 深度辩论 + 最终总结逻辑
     def trigger_delayed_replies(self, thread):
         def _delayed_task():
             repliers = [a for a in self.agents if a['name'] != thread['author']]
@@ -213,11 +212,11 @@ class GlobalStore:
             target_count = 12
             selected = random.sample(repliers, min(len(repliers), target_count))
             
-            # 总耗时控制在 1100 秒 (接近20分钟，保证下一篇贴发出来前聊完)
+            # 总耗时控制在 1100 秒 (接近20分钟)
             total_duration = 1100.0
             base_interval = total_duration / target_count
             
-            self.log(f"🧠 [深度研讨] {len(selected)} 位专家准备就绪，预计耗时 {int(total_duration/60)} 分钟")
+            self.log(f"🧠 [深度研讨] {len(selected)} 位专家入场，包含1位总结官")
 
             for i, r in enumerate(selected):
                 if self.total_cost_today >= DAILY_BUDGET: break
@@ -225,30 +224,38 @@ class GlobalStore:
                 # 随机间隔
                 time.sleep(random.uniform(base_interval * 0.8, base_interval * 1.2))
                 
-                # 【关键】每次生成评论前，去内存里抓取最新的评论列表
-                # 这样 AI 就能看到"楼上"说了什么
+                # 获取当前所有评论作为上下文
                 current_thread_snapshot = next((t for t in self.threads if t['id'] == thread['id']), None)
-                
                 existing_comments_text = ""
                 if current_thread_snapshot:
-                    # 只取最近的 5 条评论作为上下文，避免 token 爆炸
-                    recent_comments = current_thread_snapshot['comments'][-5:]
-                    for c in recent_comments:
+                    # 获取所有历史评论，确保总结的人能看到全部
+                    all_comments = current_thread_snapshot['comments']
+                    for c in all_comments:
                         existing_comments_text += f"[{c['name']}]: {c['content']}\n"
                 
-                # 构建包含"历史楼层"的上下文
+                # 判断是否是最后一个人
+                is_last_person = (i == len(selected) - 1)
+                
+                # 构建上下文
                 context_full = {
                     "title": thread['title'],
                     "content": thread['content'],
-                    "history": existing_comments_text
+                    "history": existing_comments_text,
+                    "is_last": is_last_person # 标记是否为最后一人
                 }
                 
-                reply = ai_brain_worker(r, "reply", context_full)
+                # 决定任务类型
+                task = "summary" if is_last_person else "reply"
+                
+                reply = ai_brain_worker(r, task, context_full)
                 
                 if "ERROR" not in reply:
                     comm_data = {"name": r['name'], "avatar": r['avatar'], "job": r['job'], "content": reply, "time": datetime.now(BJ_TZ).strftime("%H:%M")}
                     self.add_comment(thread['id'], comm_data)
-                    self.log(f"💬 {r['name']} 发表了深度观点")
+                    if is_last_person:
+                        self.log(f"🏆 {r['name']} 发布了最终总结陈词")
+                    else:
+                        self.log(f"💬 {r['name']} 发表了深度观点")
 
         threading.Thread(target=_delayed_task, daemon=True).start()
 
@@ -274,7 +281,7 @@ class GlobalStore:
 STORE = GlobalStore()
 
 # ==========================================
-# 4. 后台智能与调度 (V16.1 深度思考版)
+# 4. 后台智能与调度 (V16.2 总结与字数升级)
 # ==========================================
 
 def parse_thread_content(raw_text):
@@ -297,7 +304,7 @@ def ai_brain_worker(agent, task_type, context=""):
         sys_prompt = f"""
         你的身份：{agent['name']}，A股金牌分析师。
         你的性格：{agent.get('prompt', '严谨理性')}。
-        你的任务：进行深度、有逻辑、有数据的金融辩论。
+        你的任务：进行深度金融辩论。
         """
 
         if task_type == "create_post":
@@ -319,17 +326,34 @@ def ai_brain_worker(agent, task_type, context=""):
             ### 3. 风险警示 (Risk)
             (不准说废话，指出具体的业务风险)
             """
+            
+        elif task_type == "summary":
+            # 【V16.2】 最终总结 Prompt
+            thread_title = context.get('title', '')
+            history = context.get('history', '')
+            
+            user_prompt = f"""
+            任务：作为【会议主持人】，对这场关于《{thread_title}》的研讨会进行【最终总结陈词】。
+            
+            【研讨记录】：
+            {history}
+            
+            【你的行动】：
+            1. 阅读以上所有人的观点，归纳出多空双方的主要分歧点。
+            2. 提炼出最有价值的共识（Consensus）。
+            3. 给出一个最终的定性结论（机会大于风险，还是建议观望？）。
+            4. 必须提到前面表现出色的分析师名字（例如："@某某 提出的...观点非常有见地"）。
+            5. 字数要求：400-500字。
+            6. 格式：
+               **[会议纪要与最终结论]**
+               ...
+            """
+            
         else: 
-            # 【V16.1 修改】 深度回复模式
-            # context 是一个字典，包含标题、正文和历史评论
-            if isinstance(context, dict):
-                thread_title = context.get('title', '')
-                thread_content = context.get('content', '')
-                history = context.get('history', '暂无评论')
-            else:
-                thread_title = "未知"
-                thread_content = str(context)
-                history = "暂无"
+            # 【V16.2】 普通回复 Prompt (增加字数和@要求)
+            thread_title = context.get('title', '')
+            thread_content = context.get('content', '')
+            history = context.get('history', '暂无评论')
 
             user_prompt = f"""
             任务：参与这场关于《{thread_title}》的高端研讨会。
@@ -341,19 +365,17 @@ def ai_brain_worker(agent, task_type, context=""):
             {history}
             
             【你的行动】：
-            请仔细阅读上述【已有的讨论】。
-            1. 如果前面有人观点你不同意，请指名道姓地反驳他（例如："@某某 的逻辑有硬伤..."）。
-            2. 如果前面有人观点你同意，请补充更多数据支持。
-            3. 不要复读！要有增量信息！
-            4. 字数要求：100-200字（深度思考）。
-            5. 语气：专业、犀利、一针见血。
+            1. 仔细阅读【已有的讨论】。
+            2. **必须显式引用他人**：如果你同意或反对某人，必须说 "@某某名字，你的观点..."。
+            3. 你的评论需要有深度，提出新的视角（宏观/量化/基本面）。
+            4. 字数要求：250-350字（充分展开）。
             """
 
         res = client.chat.completions.create(
             model="deepseek-chat",
             messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_prompt}],
             temperature=0.8, 
-            max_tokens=1500, # 增加输出长度
+            max_tokens=2000, # 增加到 2000，确保 500 字总结不中断
             timeout=60
         )
         STORE.total_cost_today += 0.001 
@@ -387,21 +409,28 @@ def update_daily_sector():
     return False
 
 def background_loop():
-    STORE.log("🚀 V16.1 (深度研讨版) 启动...")
+    STORE.log("🚀 V16.2 (深度复盘版) 启动...")
     STORE.next_post_time = time.time()
-    STORE.next_reply_time = time.time() + 99999999 # 禁用旧的随机回复逻辑，全靠 trigger_delayed_replies
+    STORE.next_reply_time = time.time() + 99999999 
 
     while True:
         try:
             if not STORE.auto_run: time.sleep(5); continue
 
+            # 【V16.2】 严格夜间休市 (1:00 - 7:00)
+            now_hour = datetime.now(BJ_TZ).hour
+            if 1 <= now_hour < 7:
+                # 只有在整点的时候打一次日志，避免刷屏
+                if time.time() % 3600 < 10:
+                    STORE.log("🌙 夜深了，分析师们正在休息 (休市中)...")
+                time.sleep(60) # 直接睡1分钟，跳过后续逻辑
+                continue
+
             is_new_day = update_daily_sector()
             
             now = time.time()
-            # 【V16.1】 严格的20分钟间隔
             post_interval = 1200 
 
-            # 发帖逻辑
             if now >= STORE.next_post_time:
                 STORE.next_post_time = now + post_interval
                 
@@ -427,7 +456,6 @@ def background_loop():
                         "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
                     }
                     STORE.add_thread(new_thread)
-                    # 触发12连深度评论
                     STORE.trigger_delayed_replies(new_thread)
 
             time.sleep(1)
@@ -440,7 +468,7 @@ if not any(t.name == "Cyber_V16" for t in threading.enumerate()):
     threading.Thread(target=background_loop, name="Cyber_V16", daemon=True).start()
 
 # ==========================================
-# 5. UI 渲染层 (保持通用)
+# 5. UI 渲染层
 # ==========================================
 
 if "active_thread_id" not in st.session_state:

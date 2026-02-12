@@ -20,7 +20,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI 每日金股挖掘 V16.0", page_icon="🐂", layout="wide")
+st.set_page_config(page_title="AI 深度研讨会 V16.1", page_icon="🧠", layout="wide")
 
 # 风险提示
 st.warning("⚠️ **严正声明**：本站所有个股分析均为 AI 基于互联网公开信息生成的【模拟研报】，**不具备真实投资参考价值**。请勿跟单！")
@@ -69,8 +69,6 @@ def get_dynamic_image(style_key):
 # ==========================================
 # 2. 数据库管理 (保持不变)
 # ==========================================
-# ... (数据库代码完全通用，无需修改，此处省略重复定义以节省篇幅，实际运行时请保留 V15.0 的数据库代码)
-# 为了方便您直接复制，我把数据库代码简写在这里，请确保 app.py 里有这部分：
 def init_db():
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     c = conn.cursor()
@@ -136,7 +134,7 @@ def load_full_history():
 init_db()
 
 # ==========================================
-# 3. 状态与逻辑核心 (V16.0 核心升级)
+# 3. 状态与逻辑核心
 # ==========================================
 
 @st.cache_resource
@@ -147,15 +145,9 @@ class GlobalStore:
         self.auto_run = True 
         self.logs = []
         
-        self.next_post_time = 0  
-        self.next_reply_time = 0 
-        self.current_mode = "初始化"
-        self.active_burst_users = set() 
-        
-        # 【V16.0】 增加每日板块状态
         self.today_date = datetime.now(BJ_TZ).strftime("%Y-%m-%d")
-        self.daily_sector = None # 今天的主线板块
-        self.daily_sector_logic = "" # 为什么选这个板块
+        self.daily_sector = None 
+        self.daily_sector_logic = "" 
         
         self.agents = self.reload_population()
         self.threads = load_full_history() 
@@ -164,19 +156,16 @@ class GlobalStore:
     def reload_population(self):
         all_citizens = get_all_citizens()
         if not all_citizens:
-            # 专业的投研团队
             name_prefixes = ["策略", "宏观", "产业", "量化", "基本面"]
             name_suffixes = ["首席", "研究员", "分析师", "猎手"]
             jobs = ["首席策略师", "资深产业研究员", "私募投资总监", "量化交易主管"]
             avatars = ["📈","📉","📊","💴","🏦","🏢","💡","🔭"]
-            
             for _ in range(50):
                 name = f"{random.choice(name_prefixes)}{random.choice(name_suffixes)}"
                 job = random.choice(jobs)
                 avatar = random.choice(avatars)
                 prompt = "你是一名顶尖的A股分析师，擅长自上而下的基本面选股。"
                 add_citizen_to_db(name, job, avatar, prompt, is_custom=False)
-            
             self.log("✅ 50名金牌分析师已就位！")
             all_citizens = get_all_citizens()
         return all_citizens
@@ -186,8 +175,8 @@ class GlobalStore:
             img = get_dynamic_image("随想")
             genesis_thread = {
                 "id": str(uuid.uuid4()),
-                "title": "公告：V16.0 每日金股系统启动",
-                "content": "本系统逻辑已升级：\n1. 每日锁定一个最具潜力的主线板块。\n2. 深度论证上涨逻辑。\n3. 每日精选三只龙头个股。",
+                "title": "公告：V16.1 深度研讨系统启动",
+                "content": "本系统逻辑已升级：\n1. 每20分钟发布一篇深度研报。\n2. 每次引发12轮深度辩论。\n3. AI分析师将阅读前序评论，进行连续性思考。",
                 "image_url": img,
                 "author": "System_Core", "avatar": "🤖", "job": "主控",
                 "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
@@ -214,22 +203,53 @@ class GlobalStore:
                     break
         save_comment_to_db(thread_id, comment_data)
 
+    # 【V16.1 核心修改】深度辩论调度器
     def trigger_delayed_replies(self, thread):
         def _delayed_task():
             repliers = [a for a in self.agents if a['name'] != thread['author']]
             if not repliers: return
-            target_count = random.randint(3, 6)
+            
+            # 固定 12 条评论
+            target_count = 12
             selected = random.sample(repliers, min(len(repliers), target_count))
-            total_duration = 120.0
-            base_interval = total_duration / len(selected)
+            
+            # 总耗时控制在 1100 秒 (接近20分钟，保证下一篇贴发出来前聊完)
+            total_duration = 1100.0
+            base_interval = total_duration / target_count
+            
+            self.log(f"🧠 [深度研讨] {len(selected)} 位专家准备就绪，预计耗时 {int(total_duration/60)} 分钟")
+
             for i, r in enumerate(selected):
                 if self.total_cost_today >= DAILY_BUDGET: break
+                
+                # 随机间隔
                 time.sleep(random.uniform(base_interval * 0.8, base_interval * 1.2))
-                context_full = f"标题：{thread['title']}\n正文：{thread['content'][:200]}..."
+                
+                # 【关键】每次生成评论前，去内存里抓取最新的评论列表
+                # 这样 AI 就能看到"楼上"说了什么
+                current_thread_snapshot = next((t for t in self.threads if t['id'] == thread['id']), None)
+                
+                existing_comments_text = ""
+                if current_thread_snapshot:
+                    # 只取最近的 5 条评论作为上下文，避免 token 爆炸
+                    recent_comments = current_thread_snapshot['comments'][-5:]
+                    for c in recent_comments:
+                        existing_comments_text += f"[{c['name']}]: {c['content']}\n"
+                
+                # 构建包含"历史楼层"的上下文
+                context_full = {
+                    "title": thread['title'],
+                    "content": thread['content'],
+                    "history": existing_comments_text
+                }
+                
                 reply = ai_brain_worker(r, "reply", context_full)
+                
                 if "ERROR" not in reply:
                     comm_data = {"name": r['name'], "avatar": r['avatar'], "job": r['job'], "content": reply, "time": datetime.now(BJ_TZ).strftime("%H:%M")}
                     self.add_comment(thread['id'], comm_data)
+                    self.log(f"💬 {r['name']} 发表了深度观点")
+
         threading.Thread(target=_delayed_task, daemon=True).start()
 
     def trigger_new_user_event(self, new_agent):
@@ -254,7 +274,7 @@ class GlobalStore:
 STORE = GlobalStore()
 
 # ==========================================
-# 4. 后台智能与调度 (Prompt 深度改造)
+# 4. 后台智能与调度 (V16.1 深度思考版)
 # ==========================================
 
 def parse_thread_content(raw_text):
@@ -276,11 +296,8 @@ def ai_brain_worker(agent, task_type, context=""):
     try:
         sys_prompt = f"""
         你的身份：{agent['name']}，A股金牌分析师。
-        你的核心任务：【挖掘每日金股】。
-        工作准则：
-        1. 必须基于【{context.get('sector', '热门板块')}】这个板块进行分析。
-        2. 结论必须明确：给出3只具体的股票代码和名称。
-        3. 逻辑必须严密：为什么选这个板块？为什么选这3只股？
+        你的性格：{agent.get('prompt', '严谨理性')}。
+        你的任务：进行深度、有逻辑、有数据的金融辩论。
         """
 
         if task_type == "create_post":
@@ -292,80 +309,76 @@ def ai_brain_worker(agent, task_type, context=""):
             目标板块：{sector}
             板块逻辑：{logic}
             
-            请严格按照以下Markdown格式输出：
-            第一行：标题：【{sector}】爆发在即？今日三只金股深度解析
-            第二行：内容：
-            
-            正文结构：
-            ### 1. 板块逻辑推演
-            (解释为什么今天必须关注{sector}？结合政策、资金面、基本面，约100字)
-            
-            ### 2. 核心金股池 (Top 3 Picks)
-            
-            **1. [股票名称] ([6位代码])**
-            - 推荐理由：(一句话概括，如：行业龙头，订单排满)
-            - 目标价位：(预测一个合理的涨幅空间)
-            
-            **2. [股票名称] ([6位代码])**
-            - 推荐理由：(一句话概括，如：技术突破，国产替代)
-            
-            **3. [股票名称] ([6位代码])**
-            - 推荐理由：(一句话概括，如：底部放量，资金抢筹)
-            
-            ### 3. 操作建议
-            (给出一句话的仓位控制建议)
+            格式要求：
+            标题：【{sector}】深度逻辑推演与龙头梳理
+            内容：
+            ### 1. 核心逻辑 (Logic)
+            (详细论证，150字左右)
+            ### 2. 重点标的 (Alpha)
+            (列出3只股票，每只都要有具体的 估值分析 或 预期差分析)
+            ### 3. 风险警示 (Risk)
+            (不准说废话，指出具体的业务风险)
             """
         else: 
-            # 回复逻辑
+            # 【V16.1 修改】 深度回复模式
+            # context 是一个字典，包含标题、正文和历史评论
+            if isinstance(context, dict):
+                thread_title = context.get('title', '')
+                thread_content = context.get('content', '')
+                history = context.get('history', '暂无评论')
+            else:
+                thread_title = "未知"
+                thread_content = str(context)
+                history = "暂无"
+
             user_prompt = f"""
-            任务：点评这篇金股推荐。
-            原文内容：{context}
+            任务：参与这场关于《{thread_title}》的高端研讨会。
             
-            要求：
-            1. 针对其中一只股票发表看法（看多或看空）。
-            2. 或者补充该板块的另一个风险点。
-            3. 专业、简练，50字以内。
+            【楼主观点】：
+            {thread_content[:300]}...
+            
+            【已有的讨论】：
+            {history}
+            
+            【你的行动】：
+            请仔细阅读上述【已有的讨论】。
+            1. 如果前面有人观点你不同意，请指名道姓地反驳他（例如："@某某 的逻辑有硬伤..."）。
+            2. 如果前面有人观点你同意，请补充更多数据支持。
+            3. 不要复读！要有增量信息！
+            4. 字数要求：100-200字（深度思考）。
+            5. 语气：专业、犀利、一针见血。
             """
 
         res = client.chat.completions.create(
             model="deepseek-chat",
             messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_prompt}],
-            temperature=0.7, max_tokens=1000, timeout=40
+            temperature=0.8, 
+            max_tokens=1500, # 增加输出长度
+            timeout=60
         )
         STORE.total_cost_today += 0.001 
         return res.choices[0].message.content.strip()
     except Exception as e:
         return f"ERROR: {str(e)}"
 
-# 【V16.0 核心】 每日板块决策逻辑
 def update_daily_sector():
     current_date = datetime.now(BJ_TZ).strftime("%Y-%m-%d")
-    
-    # 如果今天是新的一天，或者还没有选过板块，就去搜一个新的
     if STORE.daily_sector is None or STORE.today_date != current_date:
         STORE.today_date = current_date
         if HAS_SEARCH_TOOL:
             try:
-                # 搜最新的热点
                 search_q = "A股 今日 领涨板块 资金流向 研报"
                 with DDGS() as ddgs:
                     r = list(ddgs.news(search_q, region="cn-zh", max_results=1))
                     if r:
-                        # 假设搜到的新闻标题是 "半导体板块午后狂掀涨停潮..."
-                        # 我们简单提取前几个字作为板块名，实际可以用 LLM 提取
                         news_title = r[0]['title']
                         STORE.daily_sector_logic = news_title
-                        # 这里为了演示稳定，我们让 LLM 来决定板块名
-                        # 但为了省钱/省事，这里用一个简单的随机列表兜底，
-                        # 实际生产环境应该把 news_title 发给 LLM 提取板块名
                         sectors = ["低空经济", "固态电池", "人形机器人", "AI应用", "创新药", "半导体设备"]
                         STORE.daily_sector = random.choice(sectors) 
                         STORE.log(f"📅 今日定调：主攻【{STORE.daily_sector}】板块")
                         return True
             except:
                 pass
-        
-        # 兜底逻辑
         sectors = ["低空经济", "固态电池", "人形机器人", "AI应用", "创新药", "半导体设备"]
         STORE.daily_sector = random.choice(sectors)
         STORE.daily_sector_logic = "资金高低切换，寻找超跌反弹机会"
@@ -374,32 +387,28 @@ def update_daily_sector():
     return False
 
 def background_loop():
-    STORE.log("🚀 V16.0 (每日金股版) 启动...")
+    STORE.log("🚀 V16.1 (深度研讨版) 启动...")
     STORE.next_post_time = time.time()
-    STORE.next_reply_time = time.time() + 5
+    STORE.next_reply_time = time.time() + 99999999 # 禁用旧的随机回复逻辑，全靠 trigger_delayed_replies
 
     while True:
         try:
             if not STORE.auto_run: time.sleep(5); continue
 
-            # 1. 每天（或每次重启）先确定今日板块
             is_new_day = update_daily_sector()
             
             now = time.time()
-            # 提高发帖间隔，因为现在发的是高质量长文
-            post_interval = 1800 
-            reply_interval = 600
+            # 【V16.1】 严格的20分钟间隔
+            post_interval = 1200 
 
-            # 发帖逻辑：围绕今日板块
+            # 发帖逻辑
             if now >= STORE.next_post_time:
-                STORE.next_post_time = now + post_interval + random.uniform(-10, 10)
+                STORE.next_post_time = now + post_interval
                 
-                # 选一个“首席策略师”来发主贴
                 pool = [a for a in STORE.agents if "首席" in a['job'] or "总监" in a['job']]
                 if not pool: pool = STORE.agents
                 agent = random.choice(pool)
                 
-                # 构建上下文
                 task_context = {
                     "sector": STORE.daily_sector,
                     "logic": STORE.daily_sector_logic
@@ -418,22 +427,8 @@ def background_loop():
                         "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
                     }
                     STORE.add_thread(new_thread)
+                    # 触发12连深度评论
                     STORE.trigger_delayed_replies(new_thread)
-
-            # 回帖逻辑
-            if now >= STORE.next_reply_time:
-                STORE.next_reply_time = now + reply_interval + random.uniform(-10, 10)
-                if STORE.threads:
-                    target = random.choice(STORE.threads[:5]) # 只讨论最新的几个热点
-                    candidates = [a for a in STORE.agents if a['name'] != target['author']]
-                    if candidates:
-                        agent = random.choice(candidates)
-                        # 回复内容本身
-                        context_full = target['content'] 
-                        reply = ai_brain_worker(agent, "reply", context_full)
-                        if "ERROR" not in reply:
-                            comm_data = {"name": agent['name'], "avatar": agent['avatar'], "job": agent['job'], "content": reply, "time": datetime.now(BJ_TZ).strftime("%H:%M")}
-                            STORE.add_comment(target['id'], comm_data)
 
             time.sleep(1)
 
@@ -448,7 +443,6 @@ if not any(t.name == "Cyber_V16" for t in threading.enumerate()):
 # 5. UI 渲染层 (保持通用)
 # ==========================================
 
-# 1. 状态锁
 if "active_thread_id" not in st.session_state:
     st.session_state.active_thread_id = None
 def close_dialog_callback():
@@ -456,11 +450,9 @@ def close_dialog_callback():
 def open_dialog_callback(t_id):
     st.session_state.active_thread_id = t_id
 
-# 2. 自动刷新
 if HAS_AUTOREFRESH and st.session_state.active_thread_id is None:
     count = st_autorefresh(interval=REFRESH_INTERVAL, limit=None, key="fizzbuzzcounter")
 
-# 3. 弹窗定义
 @st.dialog("📖 每日金股研报", width="large")
 def view_thread_dialog(target):
     st.markdown("""<style>[data-testid="stDialog"] button[aria-label="Close"] {display: none;}</style>""", unsafe_allow_html=True)
@@ -472,13 +464,13 @@ def view_thread_dialog(target):
         if st.button("❌ 关闭", key="close_top", type="primary", on_click=close_dialog_callback): st.rerun()
 
     clean_content = target['content'].replace("内容：", "").replace("内容:", "")
-    st.write(clean_content) # Markdown 格式会自动渲染表格和加粗
+    st.write(clean_content) 
     
     if target.get('image_url'):
         st.image(target['image_url'], width="stretch")
     
     st.divider()
-    st.markdown(f"#### 💬 专家评议 ({len(target['comments'])})")
+    st.markdown(f"#### 💬 深度研讨 ({len(target['comments'])})")
     for comment in target['comments']:
         with st.chat_message(comment['name'], avatar=comment['avatar']):
             st.markdown(comment['content'])
@@ -487,18 +479,16 @@ def view_thread_dialog(target):
     st.divider()
     if st.button("🚪 关闭并返回", key="close_bottom", type="primary", width="stretch", on_click=close_dialog_callback): st.rerun()
 
-# 侧边栏
 with st.sidebar:
     st.title("🌐 AI 每日金股挖掘")
     if STORE.daily_sector:
         st.success(f"📅 今日主线：{STORE.daily_sector}")
     
     if st.button("⚡ 强制刷新今日题材", type="primary"):
-        STORE.daily_sector = None # 重置
+        STORE.daily_sector = None 
         STORE.next_post_time = time.time()
         st.rerun()
     
-    # ... (其余侧边栏代码保持不变，注册角色、赞助图、日志等)
     with st.expander("📝 注册新分析师", expanded=True):
         with st.form("create_agent"):
             new_name = st.text_input("昵称")
@@ -516,11 +506,23 @@ with st.sidebar:
     now = time.time()
     col1, col2 = st.columns(2)
     col1.metric("下篇研报", f"{int(max(0, STORE.next_post_time - now))}s")
-    col2.metric("下次评议", f"{int(max(0, STORE.next_reply_time - now))}s")
+    
+    with st.expander("🗑️ 角色管理", expanded=False):
+        custom_citizens = [a for a in STORE.agents if a.get('is_custom')]
+        if not custom_citizens:
+            st.info("暂无用户创建的角色")
+        else:
+            for citizen in custom_citizens:
+                c1, c2 = st.columns([0.7, 0.3])
+                c1.text(f"{citizen['name']}")
+                if c2.button("删", key=f"del_{citizen['db_id']}", type="primary"):
+                    delete_citizen_from_db(citizen['db_id'])
+                    STORE.agents = STORE.reload_population()
+                    st.rerun()
+
     st.caption("🖥️ 运行日志")
     for log in reversed(STORE.logs[-5:]): st.text(log)
 
-# 主页列表
 c1, c2 = st.columns([0.8, 0.2])
 c1.subheader("📡 每日金股池 (Live)")
 if c2.button("🔄 刷新", width="stretch"):

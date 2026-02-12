@@ -20,7 +20,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI 动态研讨 V18.0", page_icon="⚡", layout="wide")
+st.set_page_config(page_title="AI 全知研讨 V18.4", page_icon="👁️", layout="wide")
 
 st.warning("⚠️ **严正声明**：本站所有内容均为 AI 角色扮演生成的【模拟研讨】，**不具备真实投资参考价值**。请勿据此交易！")
 
@@ -144,8 +144,6 @@ class GlobalStore:
         self.auto_run = True 
         self.logs = []
         
-        # 【V18.0】 移除了每日固定的 daily_sector
-        
         self.agents = self.reload_population()
         self.threads = load_full_history() 
         self.check_genesis_block()
@@ -172,10 +170,10 @@ class GlobalStore:
             img = get_dynamic_image("随想")
             genesis_thread = {
                 "id": str(uuid.uuid4()),
-                "title": "公告：V18.0 动态研讨系统启动",
-                "content": "本系统逻辑已升级：\n1. 话题去中心化：每一贴都是新热点。\n2. 快速辩论：1分钟一条深度回复。\n3. 全天候运行。",
+                "title": "公告：V18.4 全知研讨系统启动",
+                "content": "本系统逻辑已升级：\n1. 9:00-23:00 运行。\n2. 1小时1贴，1分钟1评。\n3. 所有参与者均会阅读【完整楼主文章】+【完整历史评论】。",
                 "image_url": img,
-                "author": "System_Core", "avatar": "⚡", "job": "主控",
+                "author": "System_Core", "avatar": "👁️", "job": "主控",
                 "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
             }
             self.add_thread(genesis_thread)
@@ -205,22 +203,17 @@ class GlobalStore:
             repliers = [a for a in self.agents if a['name'] != thread['author']]
             if not repliers: return
             
-            # 固定 12 条评论
             target_count = 12
             selected = random.sample(repliers, min(len(repliers), target_count))
             
-            # 【V18.0】 提速：1分钟回一个贴 (间隔60秒)
-            base_interval = 60.0
-            
-            self.log(f"🧠 [实时辩论] 针对《{thread['title']}》的讨论已开启...")
+            self.log(f"🧠 [研讨开始] 12位专家入场，将进行12分钟的辩论")
 
             for i, r in enumerate(selected):
                 if self.total_cost_today >= DAILY_BUDGET: break
                 
-                # 严格控制间隔
-                time.sleep(base_interval)
+                # 严格休眠60秒
+                time.sleep(60)
                 
-                # 获取上下文
                 current_thread_snapshot = next((t for t in self.threads if t['id'] == thread['id']), None)
                 existing_comments_text = ""
                 if current_thread_snapshot:
@@ -228,12 +221,12 @@ class GlobalStore:
                     for c in all_comments:
                         existing_comments_text += f"[{c['name']}]: {c['content']}\n"
                 
-                is_last_person = (i == len(selected) - 1)
+                is_last_person = (i == 11)
                 
                 context_full = {
                     "title": thread['title'],
-                    "content": thread['content'],
-                    "history": existing_comments_text,
+                    "content": thread['content'], 
+                    "history": existing_comments_text, 
                     "is_last": is_last_person
                 }
                 
@@ -245,9 +238,9 @@ class GlobalStore:
                     comm_data = {"name": r['name'], "avatar": r['avatar'], "job": r['job'], "content": reply, "time": datetime.now(BJ_TZ).strftime("%H:%M")}
                     self.add_comment(thread['id'], comm_data)
                     if is_last_person:
-                        self.log(f"🏆 {r['name']} 完成了最终选股总结")
+                        self.log(f"🏆 最终定音：{r['name']} 发布了选股结论")
                     else:
-                        pass 
+                        pass
 
         threading.Thread(target=_delayed_task, daemon=True).start()
 
@@ -273,7 +266,7 @@ class GlobalStore:
 STORE = GlobalStore()
 
 # ==========================================
-# 4. 后台智能与调度 (V18.0 动态话题)
+# 4. 后台智能与调度 (V18.4 Prompt升级：全知视角)
 # ==========================================
 
 def parse_thread_content(raw_text):
@@ -296,15 +289,13 @@ def ai_brain_worker(agent, task_type, context=""):
         sys_prompt = f"""
         你的身份：{agent['name']}，A股金牌分析师。
         你的性格：{agent.get('prompt', '严谨理性')}。
-        你的任务：进行深度金融分析。
         """
 
         if task_type == "create_post":
-            # 【V18.0】 动态话题：可能是新闻，也可能是随机板块
             topic_info = context if isinstance(context, str) else context.get('topic', '随机板块')
             
             user_prompt = f"""
-            任务：基于【{topic_info}】，发起一个深度的行业研讨。
+            任务：作为会议发起人，基于【{topic_info}】，发起一个深度的行业研讨。
             
             格式要求：
             标题：【板块名】... (自拟吸睛标题)
@@ -320,24 +311,32 @@ def ai_brain_worker(agent, task_type, context=""):
             """
             
         elif task_type == "summary":
+            # 总结官视角
             thread_title = context.get('title', '')
-            history = context.get('history', '')
+            thread_content = context.get('content', '')  
+            history = context.get('history', '') 
             
             user_prompt = f"""
-            任务：作为【首席投资官(CIO)】，阅读关于《{thread_title}》的所有讨论，做最终决策。
+            任务：作为【首席投资官(CIO)】，你是本次会议的**最后一位发言者**。
+            请综合【楼主提案】和【分析师辩论】，做最终决策。
             
-            【研讨记录】：
+            ---------------------
+            【楼主提案（议题）】：
+            {thread_content}  <-- (此处已读取完整原文，无截断)
+            
+            【11位分析师的辩论记录】：
             {history}
+            ---------------------
             
             【你的行动】：
-            1. 综合大家的观点。
-            2. **选股环节**：根据讨论，**选出3只最符合逻辑的股票**。
+            1. 评判楼主的逻辑是否被大家认可？还是被驳倒了？
+            2. **选股环节（核心）**：从上面的讨论中，挑选出逻辑最硬、共识最强（或者你自己认为最好）的**3只金股**。
             
             输出格式：
             **[最终决策报告]**
             
             **1. 研讨总结**
-            (简述分歧与共识)
+            (评价本次讨论的质量，总结多空分歧)
             
             **2. 最终金股池 (Top 3 Picks)**
             (必须给出具体代码和理由)
@@ -345,11 +344,12 @@ def ai_brain_worker(agent, task_type, context=""):
             - **股票B (代码)**: 理由...
             - **股票C (代码)**: 理由...
             
-            **3. 操作建议**
-            (仓位建议)
+            **3. 最终建议**
+            (一句话操作建议)
             """
             
         else: 
+            # 【V18.4 修改】 普通回复者 Prompt (全知视角)
             thread_title = context.get('title', '')
             thread_content = context.get('content', '')
             history = context.get('history', '暂无评论')
@@ -357,16 +357,20 @@ def ai_brain_worker(agent, task_type, context=""):
             user_prompt = f"""
             任务：参与这场关于《{thread_title}》的研讨。
             
-            【楼主观点】：
-            {thread_content[:300]}...
+            请先阅读【楼主的完整核心逻辑】：
+            ---------------------
+            {thread_content}  <-- (此处已读取完整原文，无截断)
+            ---------------------
             
-            【已有的讨论】：
+            再阅读【目前的研讨进度】：
+            ---------------------
             {history}
+            ---------------------
             
             【你的行动】：
-            1. 补充具体的产业链逻辑。
-            2. **可以提具体股票**：例如 "我觉得在这个逻辑下，xx股份 是绕不开的龙头"。
-            3. 必须显式引用他人：例如 "@某某名字，你的观点..."。
+            1. **必须回应楼主**：确认你是否认可楼主提出的宏观逻辑？
+            2. **必须互动**：如果有其他分析师（楼上）发表了观点，请支持或反驳他（显式引用 "@某某"）。
+            3. **可以提具体股票**：补充具体的龙头标的。
             4. 字数要求：200-300字。
             """
 
@@ -382,12 +386,10 @@ def ai_brain_worker(agent, task_type, context=""):
     except Exception as e:
         return f"ERROR: {str(e)}"
 
-# 【V18.0】 获取动态话题
+# 获取动态话题
 def get_fresh_topic():
-    # 1. 尝试搜新闻
     if HAS_SEARCH_TOOL:
         try:
-            # 搜索冷门或热门潜力板块
             queries = [
                 "A股 行业 研报 推荐",
                 "今日 资金净流入 板块",
@@ -402,7 +404,7 @@ def get_fresh_topic():
         except:
             pass
             
-    # 2. 兜底：随机挖掘被忽视的板块
+    # 兜底
     undervalued_sectors = [
         "环保工程 (低估值高股息)", 
         "公用事业 (电力/水务)", 
@@ -411,12 +413,13 @@ def get_fresh_topic():
         "轨交设备 (设备更新)", 
         "养殖业 (猪周期)", 
         "中药 (涨价逻辑)",
-        "跨境电商 (出海逻辑)"
+        "跨境电商 (出海逻辑)",
+        "固态电池 (产业化加速)"
     ]
-    return f"挖掘被忽视的板块：{random.choice(undervalued_sectors)}"
+    return f"挖掘板块：{random.choice(undervalued_sectors)}"
 
 def background_loop():
-    STORE.log("🚀 V18.0 (高频动态版) 启动...")
+    STORE.log("🚀 V18.4 (全知研讨版) 启动...")
     STORE.next_post_time = time.time()
     STORE.next_reply_time = time.time() + 99999999 
 
@@ -424,11 +427,17 @@ def background_loop():
         try:
             if not STORE.auto_run: time.sleep(5); continue
 
-            # 【V18.0】 移除了夜间休眠，全天候运行
+            # 时间控制：09:00 - 23:00 (含23点前)
+            now_hour = datetime.now(BJ_TZ).hour
+            if not (9 <= now_hour < 23):
+                if time.time() % 3600 < 10:
+                    STORE.log("🌙 休市时间 (23:00 - 09:00)，系统静默中...")
+                time.sleep(60) 
+                continue
             
             now = time.time()
-            # 【V18.0】 发帖间隔：300秒 (5分钟) 一篇
-            post_interval = 300 
+            # 发帖间隔：3600秒 (1小时)
+            post_interval = 3600
 
             if now >= STORE.next_post_time:
                 STORE.next_post_time = now + post_interval
@@ -437,7 +446,6 @@ def background_loop():
                 if not pool: pool = STORE.agents
                 agent = random.choice(pool)
                 
-                # 【V18.0】 获取全新话题
                 current_topic = get_fresh_topic()
 
                 img_url = get_dynamic_image("产业趋势")
@@ -505,8 +513,8 @@ def view_thread_dialog(target):
     if st.button("🚪 关闭并返回", key="close_bottom", type="primary", width="stretch", on_click=close_dialog_callback): st.rerun()
 
 with st.sidebar:
-    st.title("🌐 AI 动态研讨")
-    st.info("⚡ 模式：高频动态扫描")
+    st.title("🌐 AI 整点研报")
+    st.info("🕒 运行时间：09:00 - 23:00")
     
     if st.button("⚡ 强制发起新议题", type="primary"):
         STORE.next_post_time = time.time()
@@ -526,7 +534,6 @@ with st.sidebar:
                 st.rerun()
     
     st.divider()
-    # 【V18.0】 二维码回归
     if os.path.exists("pay.png"):
         st.image("pay.png", caption="投喂算力 (支持)", width="stretch")
     

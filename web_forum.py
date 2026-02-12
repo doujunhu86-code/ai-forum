@@ -20,9 +20,9 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI 深度研讨 V16.2", page_icon="⚖️", layout="wide")
+st.set_page_config(page_title="AI 宏观研讨 V17.0", page_icon="🏛️", layout="wide")
 
-st.warning("⚠️ **严正声明**：本站所有个股分析均为 AI 基于互联网公开信息生成的【模拟研报】，**不具备真实投资参考价值**。请勿跟单！")
+st.warning("⚠️ **严正声明**：本站所有内容均为 AI 角色扮演生成的【模拟研研讨】，**不具备真实投资参考价值**。请勿据此交易！")
 
 try:
     from duckduckgo_search import DDGS
@@ -53,10 +53,10 @@ REFRESH_INTERVAL = 10000
 # 动态图源映射表
 # ==========================================
 STYLE_TO_KEYWORD = {
-    "行业分析": "financial chart, growth graph", 
-    "个股挖掘": "stock market bull, money", 
+    "宏观策略": "financial chart, global map", 
+    "产业趋势": "factory, robot arm, chip", 
     "政策解读": "government building, document", 
-    "风险提示": "storm, warning sign",
+    "市场情绪": "bull and bear, stock market",
     "随想": "abstract technology"
 }
 
@@ -174,8 +174,8 @@ class GlobalStore:
             img = get_dynamic_image("随想")
             genesis_thread = {
                 "id": str(uuid.uuid4()),
-                "title": "公告：V16.2 深度研讨系统启动",
-                "content": "本系统逻辑已升级：\n1. 夜间休市机制已激活。\n2. 引入最终总结陈词环节。\n3. 实名制辩论，字数限制放宽。",
+                "title": "公告：V17.0 宏观研讨系统启动",
+                "content": "本系统逻辑已升级：\n1. 每日 09:00 - 22:00 运行。\n2. 楼主仅提出赛道概念，严禁推荐个股。\n3. 最终由总结官根据辩论结果，选出3只最佳股票。",
                 "image_url": img,
                 "author": "System_Core", "avatar": "🤖", "job": "主控",
                 "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
@@ -202,7 +202,6 @@ class GlobalStore:
                     break
         save_comment_to_db(thread_id, comment_data)
 
-    # 【V16.2】 深度辩论 + 最终总结逻辑
     def trigger_delayed_replies(self, thread):
         def _delayed_task():
             repliers = [a for a in self.agents if a['name'] != thread['author']]
@@ -212,36 +211,31 @@ class GlobalStore:
             target_count = 12
             selected = random.sample(repliers, min(len(repliers), target_count))
             
-            # 总耗时控制在 1100 秒 (接近20分钟)
-            total_duration = 1100.0
+            # 【V17.0】 总耗时控制在 3300 秒 (55分钟)，保证1小时一贴的节奏
+            total_duration = 3300.0
             base_interval = total_duration / target_count
             
-            self.log(f"🧠 [深度研讨] {len(selected)} 位专家入场，包含1位总结官")
+            self.log(f"🧠 [深度研讨] 议题开启，{len(selected)} 位专家将在1小时内完成辩论")
 
             for i, r in enumerate(selected):
                 if self.total_cost_today >= DAILY_BUDGET: break
                 
-                # 随机间隔
-                time.sleep(random.uniform(base_interval * 0.8, base_interval * 1.2))
+                time.sleep(random.uniform(base_interval * 0.9, base_interval * 1.1))
                 
-                # 获取当前所有评论作为上下文
                 current_thread_snapshot = next((t for t in self.threads if t['id'] == thread['id']), None)
                 existing_comments_text = ""
                 if current_thread_snapshot:
-                    # 获取所有历史评论，确保总结的人能看到全部
                     all_comments = current_thread_snapshot['comments']
                     for c in all_comments:
                         existing_comments_text += f"[{c['name']}]: {c['content']}\n"
                 
-                # 判断是否是最后一个人
                 is_last_person = (i == len(selected) - 1)
                 
-                # 构建上下文
                 context_full = {
                     "title": thread['title'],
                     "content": thread['content'],
                     "history": existing_comments_text,
-                    "is_last": is_last_person # 标记是否为最后一人
+                    "is_last": is_last_person
                 }
                 
                 # 决定任务类型
@@ -253,9 +247,9 @@ class GlobalStore:
                     comm_data = {"name": r['name'], "avatar": r['avatar'], "job": r['job'], "content": reply, "time": datetime.now(BJ_TZ).strftime("%H:%M")}
                     self.add_comment(thread['id'], comm_data)
                     if is_last_person:
-                        self.log(f"🏆 {r['name']} 发布了最终总结陈词")
+                        self.log(f"🏆 {r['name']} 最终定稿了三只金股")
                     else:
-                        self.log(f"💬 {r['name']} 发表了深度观点")
+                        self.log(f"💬 {r['name']} 发表了观点")
 
         threading.Thread(target=_delayed_task, daemon=True).start()
 
@@ -281,7 +275,7 @@ class GlobalStore:
 STORE = GlobalStore()
 
 # ==========================================
-# 4. 后台智能与调度 (V16.2 总结与字数升级)
+# 4. 后台智能与调度 (V17.0 逻辑重构)
 # ==========================================
 
 def parse_thread_content(raw_text):
@@ -304,59 +298,70 @@ def ai_brain_worker(agent, task_type, context=""):
         sys_prompt = f"""
         你的身份：{agent['name']}，A股金牌分析师。
         你的性格：{agent.get('prompt', '严谨理性')}。
-        你的任务：进行深度金融辩论。
+        你的任务：进行深度金融分析。
         """
 
         if task_type == "create_post":
             sector = context.get('sector', '未知板块')
             logic = context.get('logic', '未知逻辑')
             
+            # 【V17.0】 楼主 Prompt：只谈概念，不谈个股
             user_prompt = f"""
-            任务：发布今日的《板块掘金日报》。
-            目标板块：{sector}
-            板块逻辑：{logic}
+            任务：作为【会议发起人】，抛出关于【{sector}】板块的研讨议题。
+            背景逻辑：{logic}
             
             格式要求：
-            标题：【{sector}】深度逻辑推演与龙头梳理
+            标题：【{sector}】产业链深度研讨：逻辑与预期
             内容：
-            ### 1. 核心逻辑 (Logic)
-            (详细论证，150字左右)
-            ### 2. 重点标的 (Alpha)
-            (列出3只股票，每只都要有具体的 估值分析 或 预期差分析)
-            ### 3. 风险警示 (Risk)
-            (不准说废话，指出具体的业务风险)
+            ### 1. 为什么关注这个方向？ (Why Now)
+            (结合宏观政策、行业拐点进行论述，200字左右)
+            ### 2. 产业链关键环节
+            (指出上游、中游、下游哪个环节利润最厚？)
+            ### 3. 研讨方向
+            (向大家提问：我们应该关注哪些细分龙头？是关注技术突破还是业绩兑现？)
+            
+            **严格禁令：不要在主贴中推荐具体的股票代码！把这个机会留给评论区讨论。**
             """
             
         elif task_type == "summary":
-            # 【V16.2】 最终总结 Prompt
+            # 【V17.0】 总结官 Prompt：选股决策
             thread_title = context.get('title', '')
             history = context.get('history', '')
             
             user_prompt = f"""
-            任务：作为【会议主持人】，对这场关于《{thread_title}》的研讨会进行【最终总结陈词】。
+            任务：作为【首席投资官(CIO)】，阅读关于《{thread_title}》的所有讨论，做最终决策。
             
             【研讨记录】：
             {history}
             
             【你的行动】：
-            1. 阅读以上所有人的观点，归纳出多空双方的主要分歧点。
-            2. 提炼出最有价值的共识（Consensus）。
-            3. 给出一个最终的定性结论（机会大于风险，还是建议观望？）。
-            4. 必须提到前面表现出色的分析师名字（例如："@某某 提出的...观点非常有见地"）。
-            5. 字数要求：400-500字。
-            6. 格式：
-               **[会议纪要与最终结论]**
-               ...
+            1. 综合大家的观点，判断该板块是“真机会”还是“伪概念”。
+            2. **选股环节（最重要）**：根据讨论中提到的线索，或者你自己的知识库，**选出3只最符合逻辑的股票**。
+            
+            输出格式：
+            **[最终决策报告]**
+            
+            **1. 研讨总结**
+            (简述分歧与共识，100字)
+            
+            **2. 最终金股池 (Top 3 Picks)**
+            (必须给出具体代码和理由)
+            - **股票A (代码)**: 理由...
+            - **股票B (代码)**: 理由...
+            - **股票C (代码)**: 理由...
+            
+            **3. 操作建议**
+            (仓位建议)
             """
             
         else: 
-            # 【V16.2】 普通回复 Prompt (增加字数和@要求)
+            # 【V17.0】 辩手 Prompt：分析与推票
             thread_title = context.get('title', '')
             thread_content = context.get('content', '')
             history = context.get('history', '暂无评论')
 
             user_prompt = f"""
-            任务：参与这场关于《{thread_title}》的高端研讨会。
+            任务：参与这场关于《{thread_title}》的研讨。
             
             【楼主观点】：
             {thread_content[:300]}...
@@ -365,17 +370,18 @@ def ai_brain_worker(agent, task_type, context=""):
             {history}
             
             【你的行动】：
-            1. 仔细阅读【已有的讨论】。
-            2. **必须显式引用他人**：如果你同意或反对某人，必须说 "@某某名字，你的观点..."。
-            3. 你的评论需要有深度，提出新的视角（宏观/量化/基本面）。
-            4. 字数要求：250-350字（充分展开）。
+            1. 补充具体的产业链逻辑。
+            2. **可以提具体股票**：例如 "我觉得在这个逻辑下，xx股份 是绕不开的龙头"。
+            3. 或者反驳别人的逻辑。
+            4. 必须显式引用他人：例如 "@某某名字，你的观点..."。
+            5. 字数要求：200-300字。
             """
 
         res = client.chat.completions.create(
             model="deepseek-chat",
             messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_prompt}],
             temperature=0.8, 
-            max_tokens=2000, # 增加到 2000，确保 500 字总结不中断
+            max_tokens=2000, 
             timeout=60
         )
         STORE.total_cost_today += 0.001 
@@ -395,13 +401,13 @@ def update_daily_sector():
                     if r:
                         news_title = r[0]['title']
                         STORE.daily_sector_logic = news_title
-                        sectors = ["低空经济", "固态电池", "人形机器人", "AI应用", "创新药", "半导体设备"]
+                        sectors = ["低空经济", "固态电池", "人形机器人", "AI应用", "创新药", "半导体设备", "消费电子"]
                         STORE.daily_sector = random.choice(sectors) 
                         STORE.log(f"📅 今日定调：主攻【{STORE.daily_sector}】板块")
                         return True
             except:
                 pass
-        sectors = ["低空经济", "固态电池", "人形机器人", "AI应用", "创新药", "半导体设备"]
+        sectors = ["低空经济", "固态电池", "人形机器人", "AI应用", "创新药", "半导体设备", "消费电子"]
         STORE.daily_sector = random.choice(sectors)
         STORE.daily_sector_logic = "资金高低切换，寻找超跌反弹机会"
         STORE.log(f"📅 今日定调(兜底)：主攻【{STORE.daily_sector}】板块")
@@ -409,7 +415,7 @@ def update_daily_sector():
     return False
 
 def background_loop():
-    STORE.log("🚀 V16.2 (深度复盘版) 启动...")
+    STORE.log("🚀 V17.0 (宏观研讨版) 启动...")
     STORE.next_post_time = time.time()
     STORE.next_reply_time = time.time() + 99999999 
 
@@ -417,34 +423,38 @@ def background_loop():
         try:
             if not STORE.auto_run: time.sleep(5); continue
 
-            # 【V16.2】 严格夜间休市 (1:00 - 7:00)
+            # 【V17.0】 时间控制：只在 09:00 - 22:00 运行
             now_hour = datetime.now(BJ_TZ).hour
-            if 1 <= now_hour < 7:
-                # 只有在整点的时候打一次日志，避免刷屏
+            if not (9 <= now_hour <= 22):
                 if time.time() % 3600 < 10:
-                    STORE.log("🌙 夜深了，分析师们正在休息 (休市中)...")
-                time.sleep(60) # 直接睡1分钟，跳过后续逻辑
+                    STORE.log("🌙 休市时间 (22:00 - 09:00)，系统静默中...")
+                time.sleep(60) 
                 continue
 
             is_new_day = update_daily_sector()
             
             now = time.time()
-            post_interval = 1200 
+            # 【V17.0】 1小时发一贴
+            post_interval = 3600 
 
             if now >= STORE.next_post_time:
                 STORE.next_post_time = now + post_interval
+                
+                # 随机选一个新的热门板块，不要每次都一样
+                sectors = ["低空经济", "固态电池", "人形机器人", "AI应用", "创新药", "半导体设备", "自动驾驶", "商业航天"]
+                current_topic = random.choice(sectors)
                 
                 pool = [a for a in STORE.agents if "首席" in a['job'] or "总监" in a['job']]
                 if not pool: pool = STORE.agents
                 agent = random.choice(pool)
                 
                 task_context = {
-                    "sector": STORE.daily_sector,
-                    "logic": STORE.daily_sector_logic
+                    "sector": current_topic,
+                    "logic": "寻找具备穿越周期的核心资产"
                 }
 
-                img_url = get_dynamic_image("行业分析")
-                STORE.log(f"📝 正在撰写【{STORE.daily_sector}】板块深度研报...")
+                img_url = get_dynamic_image("产业趋势")
+                STORE.log(f"📝 正在发起关于【{current_topic}】的研讨...")
                 
                 raw = ai_brain_worker(agent, "create_post", task_context)
                 
@@ -481,7 +491,7 @@ def open_dialog_callback(t_id):
 if HAS_AUTOREFRESH and st.session_state.active_thread_id is None:
     count = st_autorefresh(interval=REFRESH_INTERVAL, limit=None, key="fizzbuzzcounter")
 
-@st.dialog("📖 每日金股研报", width="large")
+@st.dialog("📖 深度研讨会", width="large")
 def view_thread_dialog(target):
     st.markdown("""<style>[data-testid="stDialog"] button[aria-label="Close"] {display: none;}</style>""", unsafe_allow_html=True)
     c1, c2 = st.columns([0.85, 0.15])
@@ -498,7 +508,7 @@ def view_thread_dialog(target):
         st.image(target['image_url'], width="stretch")
     
     st.divider()
-    st.markdown(f"#### 💬 深度研讨 ({len(target['comments'])})")
+    st.markdown(f"#### 💬 专家辩论 ({len(target['comments'])})")
     for comment in target['comments']:
         with st.chat_message(comment['name'], avatar=comment['avatar']):
             st.markdown(comment['content'])
@@ -508,12 +518,10 @@ def view_thread_dialog(target):
     if st.button("🚪 关闭并返回", key="close_bottom", type="primary", width="stretch", on_click=close_dialog_callback): st.rerun()
 
 with st.sidebar:
-    st.title("🌐 AI 每日金股挖掘")
-    if STORE.daily_sector:
-        st.success(f"📅 今日主线：{STORE.daily_sector}")
+    st.title("🌐 AI 宏观研讨")
+    st.info("🕒 交易时间：09:00 - 22:00")
     
-    if st.button("⚡ 强制刷新今日题材", type="primary"):
-        STORE.daily_sector = None 
+    if st.button("⚡ 强制发起新议题", type="primary"):
         STORE.next_post_time = time.time()
         st.rerun()
     
@@ -533,7 +541,7 @@ with st.sidebar:
     st.divider()
     now = time.time()
     col1, col2 = st.columns(2)
-    col1.metric("下篇研报", f"{int(max(0, STORE.next_post_time - now))}s")
+    col1.metric("下场研讨", f"{int(max(0, STORE.next_post_time - now))}s")
     
     with st.expander("🗑️ 角色管理", expanded=False):
         custom_citizens = [a for a in STORE.agents if a.get('is_custom')]
@@ -552,7 +560,7 @@ with st.sidebar:
     for log in reversed(STORE.logs[-5:]): st.text(log)
 
 c1, c2 = st.columns([0.8, 0.2])
-c1.subheader("📡 每日金股池 (Live)")
+c1.subheader("📡 宏观研讨流 (Live)")
 if c2.button("🔄 刷新", width="stretch"):
     st.session_state.active_thread_id = None
     st.rerun()
@@ -564,7 +572,7 @@ if st.session_state.active_thread_id:
     else: st.session_state.active_thread_id = None; st.rerun()
 
 with STORE.lock: threads_snapshot = list(STORE.threads)
-if not threads_snapshot: st.info("🕸️ 正在挖掘今日数据...")
+if not threads_snapshot: st.info("🕸️ 正在筹备今日议题...")
 for thread in threads_snapshot:
     with st.container(border=True):
         cols = st.columns([0.08, 0.6, 0.2, 0.12])

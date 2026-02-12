@@ -20,7 +20,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI 闭环投研 V19.0", page_icon="📈", layout="wide")
+st.set_page_config(page_title="AI 闭环投研 V19.2", page_icon="📈", layout="wide")
 
 st.warning("⚠️ **严正声明**：本站所有内容均为 AI 角色扮演生成的【模拟研讨】，**不具备真实投资参考价值**。请勿据此交易！")
 
@@ -66,14 +66,31 @@ def get_dynamic_image(style_key):
     return img_url
 
 # ==========================================
-# 2. 数据库管理
+# 2. 数据库管理 (V19.2 增加自动修复功能)
 # ==========================================
 def init_db():
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     c = conn.cursor()
+    
+    # 1. 建表
     c.execute('''CREATE TABLE IF NOT EXISTS citizens (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, job TEXT, avatar TEXT, prompt TEXT, is_custom BOOLEAN DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     c.execute('''CREATE TABLE IF NOT EXISTS threads (id TEXT PRIMARY KEY, title TEXT, content TEXT, image_url TEXT, author_name TEXT, author_avatar TEXT, author_job TEXT, created_at TEXT, timestamp REAL)''')
     c.execute('''CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY AUTOINCREMENT, thread_id TEXT, author_name TEXT, author_avatar TEXT, author_job TEXT, content TEXT, created_at TEXT, FOREIGN KEY(thread_id) REFERENCES threads(id))''')
+    
+    # 2. 【V19.2 自动迁移】检查 threads 表是否缺少 timestamp 字段
+    # 这段代码能拯救旧的数据库文件
+    try:
+        c.execute("SELECT timestamp FROM threads LIMIT 1")
+    except sqlite3.OperationalError:
+        # 如果报错说明没有 timestamp 字段，我们加进去
+        print("⚠️ 检测到旧版数据库，正在执行自动迁移...")
+        c.execute("ALTER TABLE threads ADD COLUMN timestamp REAL")
+        # 给旧数据填上当前时间
+        current_ts = time.time()
+        c.execute("UPDATE threads SET timestamp = ?", (current_ts,))
+        conn.commit()
+        print("✅ 数据库迁移完成！")
+
     conn.commit()
     conn.close()
 
@@ -126,11 +143,32 @@ def load_full_history():
         comments = []
         for cr in comment_rows:
             comments.append({"name": cr[2], "avatar": cr[3], "job": cr[4], "content": cr[5], "time": cr[6]})
-        threads.append({"id": r[0], "title": r[1], "content": r[2], "image_url": r[3], "author": r[4], "avatar": r[5], "job": r[6], "time": r[7], "comments": comments})
+        
+        # 安全读取 timestamp，防止旧数据还是空的（虽然上面init_db修复了，双重保险）
+        ts = 0.0
+        try:
+            if len(r) > 8 and r[8] is not None:
+                ts = float(r[8])
+            else:
+                ts = time.time()
+        except:
+            ts = time.time()
+
+        threads.append({
+            "id": r[0], 
+            "title": r[1], 
+            "content": r[2], 
+            "image_url": r[3], 
+            "author": r[4], 
+            "avatar": r[5], 
+            "job": r[6], 
+            "time": r[7], 
+            "timestamp": ts, 
+            "comments": comments
+        })
     conn.close()
     return threads
 
-# 【V19.0】 检查帖子是否已经复盘过
 def check_if_reviewed(thread_id):
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     c = conn.cursor()
@@ -153,7 +191,6 @@ class GlobalStore:
         self.auto_run = True 
         self.logs = []
         
-        # 【V19.0】 记录今天是否发过早中晚
         self.last_post_date = None
         self.posts_done_today = {"morning": False, "noon": False, "evening": False}
         
@@ -183,11 +220,12 @@ class GlobalStore:
             img = get_dynamic_image("随想")
             genesis_thread = {
                 "id": str(uuid.uuid4()),
-                "title": "公告：V19.0 闭环投研系统启动",
-                "content": "系统升级：\n1. 每日三更 (09:15, 12:30, 20:00)。\n2. 引入对抗性辩论机制。\n3. T+5 自动回测复盘功能上线。",
+                "title": "公告：V19.2 闭环修复版启动",
+                "content": "系统升级：\n1. 数据库自动迁移修复完成。\n2. 每日三更 (09:15, 12:30, 20:00)。\n3. T+5 自动回测复盘功能正常运行。",
                 "image_url": img,
-                "author": "System_Core", "avatar": "🔄", "job": "主控",
-                "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
+                "author": "System_Core", "avatar": "🛠️", "job": "主控",
+                "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M"),
+                "timestamp": time.time()
             }
             self.add_thread(genesis_thread)
 
@@ -235,9 +273,7 @@ class GlobalStore:
                 
                 is_last_person = (i == 11)
                 
-                # 【V19.0】 对抗性角色分配
-                # 奇数楼层 (index 0, 2...) -> 质疑者/做空
-                # 偶数楼层 (index 1, 3...) -> 辩护者/补充
+                # 对抗性角色分配
                 role_type = "critic" if i % 2 == 0 else "supporter"
                 if is_last_person: role_type = "judge"
 
@@ -259,19 +295,17 @@ class GlobalStore:
                     if is_last_person:
                         self.log(f"🏆 {r['name']}：辩论结束，结论已出")
                     else:
-                        action = "质疑" if role_type == "critic" else "补充"
-                        # self.log(f"⚔️ {r['name']} 发起了{action}") 
+                        pass
 
         threading.Thread(target=_delayed_task, daemon=True).start()
 
     def trigger_new_user_event(self, new_agent):
-        # 简化版：新用户入职不发贴，只记录
         self.log(f"🎉 分析师 {new_agent['name']} 加盟！")
 
 STORE = GlobalStore()
 
 # ==========================================
-# 4. 后台智能与调度 (V19.0 闭环逻辑)
+# 4. 后台智能与调度
 # ==========================================
 
 def parse_thread_content(raw_text):
@@ -338,9 +372,8 @@ def ai_brain_worker(agent, task_type, context=""):
             """
             
         elif task_type == "review":
-            # 【V19.0】 复盘回测 Prompt
             thread_title = context.get('title', '')
-            summary = context.get('summary', '') # 之前的结论
+            summary = context.get('summary', '') 
             
             user_prompt = f"""
             任务：你是一名【冷酷的审计员】。
@@ -362,7 +395,6 @@ def ai_brain_worker(agent, task_type, context=""):
             """
 
         else: 
-            # 【V19.0】 辩论模式 Prompt
             thread_title = context.get('title', '')
             thread_content = context.get('content', '')
             history = context.get('history', '暂无评论')
@@ -392,7 +424,7 @@ def ai_brain_worker(agent, task_type, context=""):
         res = client.chat.completions.create(
             model="deepseek-chat",
             messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_prompt}],
-            temperature=0.9, # 提高温度，增加多样性
+            temperature=0.9, 
             max_tokens=2000, 
             timeout=60
         )
@@ -413,36 +445,25 @@ def get_fresh_topic():
         except: pass
     return f"挖掘被忽视的低估值板块"
 
-# 【V19.0】 检查是否有旧贴需要复盘
+# 检查复盘任务
 def check_and_run_reviews():
-    # 逻辑：找出所有 5 天前发布的，且没有被“回测机器”评论过的帖子
-    # 为了演示效果，我们把时间缩短：检查 30 分钟前的帖子 (模拟5天)
-    # 实际使用请把 seconds=1800 改为 days=5
+    # 模拟检查 30 分钟前的帖子
     review_threshold = datetime.now() - timedelta(minutes=30) 
     review_timestamp = review_threshold.timestamp()
     
     with STORE.lock:
-        # 简单遍历内存中的 threads（实际应查库）
         candidates = []
         for t in STORE.threads:
-            if t['timestamp'] < review_timestamp:
+            ts = t.get('timestamp', 0)
+            if ts < review_timestamp:
                 if not check_if_reviewed(t['id']):
                     candidates.append(t)
     
     for t in candidates:
         STORE.log(f"🕵️‍♂️ 正在对 5 天前的帖子《{t['title']}》进行回测复盘...")
-        
-        # 提取之前的结论（一般在最后一条评论里）
         last_comment = t['comments'][-1]['content'] if t['comments'] else "无结论"
-        
-        context = {
-            "title": t['title'],
-            "summary": last_comment
-        }
-        
-        # 专门的复盘机器人
+        context = {"title": t['title'], "summary": last_comment}
         reviewer_agent = {"name": "回测机器", "job": "审计系统", "avatar": "🤖", "prompt": "客观公正"}
-        
         review_content = ai_brain_worker(reviewer_agent, "review", context)
         
         if "ERROR" not in review_content:
@@ -454,12 +475,11 @@ def check_and_run_reviews():
                 "time": datetime.now(BJ_TZ).strftime("%H:%M")
             }
             STORE.add_comment(t['id'], comm_data)
-            time.sleep(5) # 稍微歇一下
+            time.sleep(5) 
 
 def background_loop():
-    STORE.log("🚀 V19.0 (闭环投研版) 启动...")
+    STORE.log("🚀 V19.2 (闭环修复版) 启动...")
     
-    # 初始化日期状态
     current_date_str = datetime.now(BJ_TZ).strftime("%Y-%m-%d")
     if STORE.last_post_date != current_date_str:
         STORE.last_post_date = current_date_str
@@ -472,20 +492,16 @@ def background_loop():
             now_dt = datetime.now(BJ_TZ)
             current_date_str = now_dt.strftime("%Y-%m-%d")
             
-            # 跨天重置
             if STORE.last_post_date != current_date_str:
                 STORE.last_post_date = current_date_str
                 STORE.posts_done_today = {"morning": False, "noon": False, "evening": False}
                 STORE.log("📅 新的一天，发帖任务重置")
 
-            # 1. 检查复盘任务 (每循环都检查一下)
             check_and_run_reviews()
 
-            # 2. 检查发帖任务
             current_hm = now_dt.strftime("%H:%M")
             target_period = None
             
-            # 定义早中晚的时间窗口 (放宽一点，防止错过)
             if "09:15" <= current_hm <= "09:30" and not STORE.posts_done_today["morning"]:
                 target_period = "早盘策略"
                 STORE.posts_done_today["morning"] = True
@@ -512,14 +528,21 @@ def background_loop():
                 if "ERROR" not in raw:
                     t, c = parse_thread_content(raw)
                     new_thread = {
-                        "id": str(uuid.uuid4()), "title": t, "content": c, "image_url": img_url,
-                        "author": agent['name'], "avatar": agent['avatar'], "job": agent['job'], 
-                        "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
+                        "id": str(uuid.uuid4()), 
+                        "title": t, 
+                        "content": c, 
+                        "image_url": img_url,
+                        "author": agent['name'], 
+                        "avatar": agent['avatar'], 
+                        "job": agent['job'], 
+                        "comments": [], 
+                        "time": datetime.now(BJ_TZ).strftime("%H:%M"),
+                        "timestamp": time.time()
                     }
                     STORE.add_thread(new_thread)
                     STORE.trigger_delayed_replies(new_thread)
 
-            time.sleep(10) # 10秒检查一次时间
+            time.sleep(10) 
 
         except Exception as e:
             STORE.log(f"Error: {e}")
@@ -572,16 +595,29 @@ with st.sidebar:
     st.title("🌐 AI 闭环投研")
     st.info("🕒 发帖时刻：09:15 / 12:30 / 20:00")
     
-    # 方便演示，强制触发
     if st.button("⚡ 强制发布一贴 (测试)", type="primary"):
-        STORE.posts_done_today["morning"] = False # 重置一下状态欺骗逻辑
-        # 手动改一下时间让它命中逻辑太麻烦，直接改 next_post_time 没用，因为现在是定时的
-        # 所以这里我们直接在这里调用一次核心逻辑
-        threading.Thread(target=lambda: STORE.log("⚡ 强制测试触发中...")).start()
-        # 这里只是界面按钮，实际逻辑太复杂，建议直接改系统时间或等时间到
-        # 为了用户体验，我们稍微 hack 一下：
-        STORE.posts_done_today = {"morning": False, "noon": False, "evening": False} # 重置所有任务
-        st.success("已重置今日任务状态，系统检测到时间匹配时会自动发帖（或请修改系统时间测试）")
+        # 强制重置状态并触发
+        STORE.posts_done_today = {"morning": False, "noon": False, "evening": False}
+        threading.Thread(target=lambda: STORE.log("⚡ 用户请求强制发帖..."), daemon=True).start()
+        
+        # 直接调用发帖逻辑（模拟）
+        pool = [a for a in STORE.agents]
+        agent = random.choice(pool)
+        topic = get_fresh_topic()
+        img_url = get_dynamic_image("早盘策略")
+        context = {"topic": topic, "period": "早盘策略(强制)"}
+        raw = ai_brain_worker(agent, "create_post", context)
+        if "ERROR" not in raw:
+            t, c = parse_thread_content(raw)
+            new_thread = {
+                "id": str(uuid.uuid4()), "title": t, "content": c, "image_url": img_url,
+                "author": agent['name'], "avatar": agent['avatar'], "job": agent['job'], 
+                "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M"),
+                "timestamp": time.time()
+            }
+            STORE.add_thread(new_thread)
+            STORE.trigger_delayed_replies(new_thread)
+            st.success("已强制触发！请刷新列表。")
 
     st.divider()
     if os.path.exists("pay.png"):

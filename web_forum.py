@@ -20,7 +20,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI 闭环投研 V19.2", page_icon="📈", layout="wide")
+st.set_page_config(page_title="AI 闭环投研 V19.4", page_icon="🛡️", layout="wide")
 
 st.warning("⚠️ **严正声明**：本站所有内容均为 AI 角色扮演生成的【模拟研讨】，**不具备真实投资参考价值**。请勿据此交易！")
 
@@ -66,31 +66,23 @@ def get_dynamic_image(style_key):
     return img_url
 
 # ==========================================
-# 2. 数据库管理 (V19.2 增加自动修复功能)
+# 2. 数据库管理
 # ==========================================
 def init_db():
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     c = conn.cursor()
-    
-    # 1. 建表
     c.execute('''CREATE TABLE IF NOT EXISTS citizens (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, job TEXT, avatar TEXT, prompt TEXT, is_custom BOOLEAN DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     c.execute('''CREATE TABLE IF NOT EXISTS threads (id TEXT PRIMARY KEY, title TEXT, content TEXT, image_url TEXT, author_name TEXT, author_avatar TEXT, author_job TEXT, created_at TEXT, timestamp REAL)''')
     c.execute('''CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY AUTOINCREMENT, thread_id TEXT, author_name TEXT, author_avatar TEXT, author_job TEXT, content TEXT, created_at TEXT, FOREIGN KEY(thread_id) REFERENCES threads(id))''')
     
-    # 2. 【V19.2 自动迁移】检查 threads 表是否缺少 timestamp 字段
-    # 这段代码能拯救旧的数据库文件
+    # 自动修复旧数据库缺失 timestamp 的问题
     try:
         c.execute("SELECT timestamp FROM threads LIMIT 1")
     except sqlite3.OperationalError:
-        # 如果报错说明没有 timestamp 字段，我们加进去
-        print("⚠️ 检测到旧版数据库，正在执行自动迁移...")
         c.execute("ALTER TABLE threads ADD COLUMN timestamp REAL")
-        # 给旧数据填上当前时间
-        current_ts = time.time()
-        c.execute("UPDATE threads SET timestamp = ?", (current_ts,))
+        c.execute("UPDATE threads SET timestamp = ?", (time.time(),))
         conn.commit()
-        print("✅ 数据库迁移完成！")
-
+    
     conn.commit()
     conn.close()
 
@@ -144,7 +136,7 @@ def load_full_history():
         for cr in comment_rows:
             comments.append({"name": cr[2], "avatar": cr[3], "job": cr[4], "content": cr[5], "time": cr[6]})
         
-        # 安全读取 timestamp，防止旧数据还是空的（虽然上面init_db修复了，双重保险）
+        # 安全读取 timestamp
         ts = 0.0
         try:
             if len(r) > 8 and r[8] is not None:
@@ -155,16 +147,9 @@ def load_full_history():
             ts = time.time()
 
         threads.append({
-            "id": r[0], 
-            "title": r[1], 
-            "content": r[2], 
-            "image_url": r[3], 
-            "author": r[4], 
-            "avatar": r[5], 
-            "job": r[6], 
-            "time": r[7], 
-            "timestamp": ts, 
-            "comments": comments
+            "id": r[0], "title": r[1], "content": r[2], "image_url": r[3], 
+            "author": r[4], "avatar": r[5], "job": r[6], "time": r[7], 
+            "timestamp": ts, "comments": comments
         })
     conn.close()
     return threads
@@ -220,10 +205,10 @@ class GlobalStore:
             img = get_dynamic_image("随想")
             genesis_thread = {
                 "id": str(uuid.uuid4()),
-                "title": "公告：V19.2 闭环修复版启动",
-                "content": "系统升级：\n1. 数据库自动迁移修复完成。\n2. 每日三更 (09:15, 12:30, 20:00)。\n3. T+5 自动回测复盘功能正常运行。",
+                "title": "公告：V19.4 强力解析版启动",
+                "content": "系统升级：\n1. 修复了部分帖子内容为空的Bug。\n2. 采用贪婪解析模式，确保正文不丢失。\n3. T+5 复盘正常运行。",
                 "image_url": img,
-                "author": "System_Core", "avatar": "🛠️", "job": "主控",
+                "author": "System_Core", "avatar": "🛡️", "job": "主控",
                 "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M"),
                 "timestamp": time.time()
             }
@@ -262,7 +247,7 @@ class GlobalStore:
             for i, r in enumerate(selected):
                 if self.total_cost_today >= DAILY_BUDGET: break
                 
-                time.sleep(60) # 1分钟一贴
+                time.sleep(60) 
                 
                 current_thread_snapshot = next((t for t in self.threads if t['id'] == thread['id']), None)
                 existing_comments_text = ""
@@ -273,7 +258,6 @@ class GlobalStore:
                 
                 is_last_person = (i == 11)
                 
-                # 对抗性角色分配
                 role_type = "critic" if i % 2 == 0 else "supporter"
                 if is_last_person: role_type = "judge"
 
@@ -305,23 +289,49 @@ class GlobalStore:
 STORE = GlobalStore()
 
 # ==========================================
-# 4. 后台智能与调度
+# 4. 后台智能与调度 (V19.4 强力解析逻辑)
 # ==========================================
 
+# 【V19.4 重点修复】贪婪解析器
 def parse_thread_content(raw_text):
-    lines = raw_text.split('\n')
-    clean_lines = [l.strip() for l in lines if l.strip() and not (l.startswith("指令") or "20字" in l)]
-    if not clean_lines: return "无题", "..."
+    # 1. 预处理：去除空行
+    lines = [l.strip() for l in raw_text.split('\n') if l.strip()]
+    
+    if not lines:
+        return "AI生成异常", "内容为空，请稍后刷新..."
+
     title = ""
     content = ""
-    for i, line in enumerate(clean_lines):
-        if line.startswith("标题"):
-            title = line.replace("标题：", "").replace("标题:", "").strip()
-        elif line.startswith("内容"):
-            content = line.replace("内容：", "").replace("内容:", "").strip() + "\n" + "\n".join(clean_lines[i+1:])
-            break
-    if not title: title = clean_lines[0]; content = "\n".join(clean_lines[1:])
-    return title[:30], content
+
+    # 2. 尝试识别第一行是否为标题
+    first_line = lines[0]
+    if "标题" in first_line or "Title" in first_line:
+        # 去掉"标题："前缀
+        title = first_line.replace("标题", "").replace("Title", "").replace(":", "").replace("：", "").strip()
+        # 剩下的所有行，都是内容！
+        if len(lines) > 1:
+            content = "\n".join(lines[1:])
+    else:
+        # 如果第一行没有"标题"两个字，我们假设第一行就是标题
+        title = first_line
+        if len(lines) > 1:
+            content = "\n".join(lines[1:])
+
+    # 3. 清理内容中的"内容："标签（如果AI把这行写在第二行的话）
+    # 比如：
+    # 标题：XXX
+    # 内容：今天股市大涨...
+    if content.startswith("内容") or content.startswith("Content"):
+        # 找到第一个冒号，冒号后面的才是真内容
+        parts = content.split("：", 1) if "：" in content else content.split(":", 1)
+        if len(parts) > 1:
+            content = parts[1].strip()
+
+    # 4. 兜底
+    if not title: title = "无题"
+    if not content: content = "（AI未生成正文内容，但根据上下文进行了分析）"
+
+    return title, content
 
 def ai_brain_worker(agent, task_type, context=""):
     try:
@@ -402,9 +412,9 @@ def ai_brain_worker(agent, task_type, context=""):
             
             instruction = ""
             if role_type == "critic":
-                instruction = "你的角色是【质疑者/空头】。必须挑上一楼的刺！或者指出楼主逻辑的硬伤（如估值太高、业绩雷、技术不成熟）。语气要犀利。"
+                instruction = "你的角色是【质疑者/空头】。必须挑上一楼的刺！或者指出楼主逻辑的硬伤。语气要犀利。"
             else:
-                instruction = "你的角色是【补充者/多头】。虽然同意大方向，但要补充更细节的数据，或者反驳刚才那个质疑者。语气要专业。"
+                instruction = "你的角色是【补充者/多头】。虽然同意大方向，但要补充更细节的数据。语气要专业。"
 
             user_prompt = f"""
             任务：参与《{thread_title}》的辩论。
@@ -447,7 +457,6 @@ def get_fresh_topic():
 
 # 检查复盘任务
 def check_and_run_reviews():
-    # 模拟检查 30 分钟前的帖子
     review_threshold = datetime.now() - timedelta(minutes=30) 
     review_timestamp = review_threshold.timestamp()
     
@@ -478,7 +487,7 @@ def check_and_run_reviews():
             time.sleep(5) 
 
 def background_loop():
-    STORE.log("🚀 V19.2 (闭环修复版) 启动...")
+    STORE.log("🚀 V19.4 (强力解析版) 启动...")
     
     current_date_str = datetime.now(BJ_TZ).strftime("%Y-%m-%d")
     if STORE.last_post_date != current_date_str:

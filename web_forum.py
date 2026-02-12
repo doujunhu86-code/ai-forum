@@ -20,7 +20,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI 闭环投研 V19.4", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="AI 闭环投研 V19.5", page_icon="📅", layout="wide")
 
 st.warning("⚠️ **严正声明**：本站所有内容均为 AI 角色扮演生成的【模拟研讨】，**不具备真实投资参考价值**。请勿据此交易！")
 
@@ -75,7 +75,7 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS threads (id TEXT PRIMARY KEY, title TEXT, content TEXT, image_url TEXT, author_name TEXT, author_avatar TEXT, author_job TEXT, created_at TEXT, timestamp REAL)''')
     c.execute('''CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY AUTOINCREMENT, thread_id TEXT, author_name TEXT, author_avatar TEXT, author_job TEXT, content TEXT, created_at TEXT, FOREIGN KEY(thread_id) REFERENCES threads(id))''')
     
-    # 自动修复旧数据库缺失 timestamp 的问题
+    # 自动修复旧数据库
     try:
         c.execute("SELECT timestamp FROM threads LIMIT 1")
     except sqlite3.OperationalError:
@@ -205,10 +205,10 @@ class GlobalStore:
             img = get_dynamic_image("随想")
             genesis_thread = {
                 "id": str(uuid.uuid4()),
-                "title": "公告：V19.4 强力解析版启动",
-                "content": "系统升级：\n1. 修复了部分帖子内容为空的Bug。\n2. 采用贪婪解析模式，确保正文不丢失。\n3. T+5 复盘正常运行。",
+                "title": "公告：V19.5 真实时间版启动",
+                "content": "系统升级：\n1. 回测周期已调整为 T+5 (120小时)。\n2. 修复了解析 Bug。\n3. 每日早中晚三更。",
                 "image_url": img,
-                "author": "System_Core", "avatar": "🛡️", "job": "主控",
+                "author": "System_Core", "avatar": "📅", "job": "主控",
                 "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M"),
                 "timestamp": time.time()
             }
@@ -289,45 +289,32 @@ class GlobalStore:
 STORE = GlobalStore()
 
 # ==========================================
-# 4. 后台智能与调度 (V19.4 强力解析逻辑)
+# 4. 后台智能与调度
 # ==========================================
 
-# 【V19.4 重点修复】贪婪解析器
 def parse_thread_content(raw_text):
-    # 1. 预处理：去除空行
     lines = [l.strip() for l in raw_text.split('\n') if l.strip()]
-    
     if not lines:
         return "AI生成异常", "内容为空，请稍后刷新..."
 
     title = ""
     content = ""
 
-    # 2. 尝试识别第一行是否为标题
     first_line = lines[0]
     if "标题" in first_line or "Title" in first_line:
-        # 去掉"标题："前缀
         title = first_line.replace("标题", "").replace("Title", "").replace(":", "").replace("：", "").strip()
-        # 剩下的所有行，都是内容！
         if len(lines) > 1:
             content = "\n".join(lines[1:])
     else:
-        # 如果第一行没有"标题"两个字，我们假设第一行就是标题
         title = first_line
         if len(lines) > 1:
             content = "\n".join(lines[1:])
 
-    # 3. 清理内容中的"内容："标签（如果AI把这行写在第二行的话）
-    # 比如：
-    # 标题：XXX
-    # 内容：今天股市大涨...
     if content.startswith("内容") or content.startswith("Content"):
-        # 找到第一个冒号，冒号后面的才是真内容
         parts = content.split("：", 1) if "：" in content else content.split(":", 1)
         if len(parts) > 1:
             content = parts[1].strip()
 
-    # 4. 兜底
     if not title: title = "无题"
     if not content: content = "（AI未生成正文内容，但根据上下文进行了分析）"
 
@@ -371,7 +358,7 @@ def ai_brain_worker(agent, task_type, context=""):
             
             【你的行动】：
             1. 看到有人质疑楼主了吗？楼主的逻辑站得住脚吗？
-            2. **选股（重要）**：综合各方观点，选出 **3只** 经得起推敲的股票。
+            2. **选股环节（核心）**：从上面的讨论中，挑选出逻辑最硬、共识最强（或者你自己认为最好）的**3只金股**。
             3. 如果大家都很悲观，你可以建议空仓。
             
             输出：
@@ -443,7 +430,6 @@ def ai_brain_worker(agent, task_type, context=""):
     except Exception as e:
         return f"ERROR: {str(e)}"
 
-# 获取动态话题
 def get_fresh_topic():
     if HAS_SEARCH_TOOL:
         try:
@@ -455,9 +441,10 @@ def get_fresh_topic():
         except: pass
     return f"挖掘被忽视的低估值板块"
 
-# 检查复盘任务
+# 【V19.5 修复】真实时间判定
 def check_and_run_reviews():
-    review_threshold = datetime.now() - timedelta(minutes=30) 
+    # 真正的 T+5 判定：检查当前时间 - 发布时间 >= 5天
+    review_threshold = datetime.now() - timedelta(days=5) 
     review_timestamp = review_threshold.timestamp()
     
     with STORE.lock:
@@ -487,7 +474,7 @@ def check_and_run_reviews():
             time.sleep(5) 
 
 def background_loop():
-    STORE.log("🚀 V19.4 (强力解析版) 启动...")
+    STORE.log("🚀 V19.5 (真实时间版) 启动...")
     
     current_date_str = datetime.now(BJ_TZ).strftime("%Y-%m-%d")
     if STORE.last_post_date != current_date_str:
@@ -604,12 +591,10 @@ with st.sidebar:
     st.title("🌐 AI 闭环投研")
     st.info("🕒 发帖时刻：09:15 / 12:30 / 20:00")
     
+    # 强制发布测试按钮
     if st.button("⚡ 强制发布一贴 (测试)", type="primary"):
-        # 强制重置状态并触发
         STORE.posts_done_today = {"morning": False, "noon": False, "evening": False}
         threading.Thread(target=lambda: STORE.log("⚡ 用户请求强制发帖..."), daemon=True).start()
-        
-        # 直接调用发帖逻辑（模拟）
         pool = [a for a in STORE.agents]
         agent = random.choice(pool)
         topic = get_fresh_topic()

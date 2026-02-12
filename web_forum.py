@@ -20,7 +20,10 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI共创社区 V14.5 (2026适配版)", page_icon="✨", layout="wide")
+st.set_page_config(page_title="AI 价值投资研究院 V15.0", page_icon="📈", layout="wide")
+
+# 【V15.0 新增】风险提示横幅
+st.warning("⚠️ **风险提示**：本论坛内容由 AI 模拟“金融分析师”角色生成，仅供技术研究与逻辑推演，**绝不构成任何投资建议**。股市有风险，入市需谨慎。")
 
 try:
     from duckduckgo_search import DDGS
@@ -51,38 +54,39 @@ REFRESH_INTERVAL = 10000
 # 动态图源映射表
 # ==========================================
 STYLE_TO_KEYWORD = {
-    "生活碎片": "lifestyle,morning", 
-    "今日感悟": "abstract,thought", 
-    "实用技巧": "work,desk", 
-    "好物分享": "product,minimalism",
-    "问答互动": "people,talking", 
-    "兴趣展示": "hobby,DIY", 
-    "书影音记录": "book,movie", 
-    "回忆角落": "vintage,film",
-    "冷知识科普": "science,space", 
-    "治愈瞬间": "cat,dog,sunset", 
-    "话题讨论": "meeting,discussion", 
-    "挑战参与": "sport,active",
-    "幕后花絮": "behind,camera", 
-    "地点打卡": "city,travel,street", 
-    "幽默段子": "funny,animal", 
-    "成长记录": "climbing,growth",
-    "音乐共享": "music,vinyl", 
-    "观点输出": "writing,coffee", 
-    "问题求助": "question,confused", 
-    "未来展望": "future,sky",
-    "今日热点": "news,technology",
-    "随想": "random"
+    # 映射为比较抽象的商务风格
+    "生活碎片": "office, business meeting", 
+    "今日感悟": "financial chart, stock market", 
+    "实用技巧": "calculator, money, growth", 
+    "好物分享": "product analysis, factory",
+    "问答互动": "handshake, agreement", 
+    "兴趣展示": "reading reports, library", 
+    "书影音记录": "history book, data visualization", 
+    "回忆角落": "vintage building, bank", 
+    "冷知识科普": "technology chip, laboratory", 
+    "治愈瞬间": "green plants, steady growth", 
+    "话题讨论": "conference, microphone", 
+    "挑战参与": "mountain climbing, success", 
+    "幕后花絮": "working late, laptop", 
+    "地点打卡": "skyscraper, city skyline", 
+    "幽默段子": "bull and bear, funny finance", 
+    "成长记录": "upward arrow, profit", 
+    "音乐共享": "classical music, focus", 
+    "观点输出": "writing report, pen", 
+    "问题求助": "question mark, strategy", 
+    "未来展望": "future city, robot", 
+    "今日热点": "global news, map", 
+    "随想": "abstract geometry"
 }
 
+# 使用 Picsum 确保绝对稳定
 def get_dynamic_image(style_key):
-    # 使用 Picsum 确保稳定
     random_seed = random.randint(1, 1000000)
     img_url = f"https://picsum.photos/seed/{random_seed}/800/450"
     return img_url
 
 # ==========================================
-# 2. 数据库管理
+# 2. 数据库管理 (保持不变)
 # ==========================================
 
 def init_db():
@@ -162,7 +166,6 @@ def save_comment_to_db(thread_id, comment_data):
 def load_full_history():
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     c = conn.cursor()
-    # 加载最新的 100 条
     c.execute("SELECT * FROM threads ORDER BY timestamp DESC LIMIT 100") 
     thread_rows = c.fetchall()
     threads = []
@@ -210,21 +213,22 @@ class GlobalStore:
     def reload_population(self):
         all_citizens = get_all_citizens()
         if not all_citizens:
-            name_prefixes = ["夜", "零", "光", "暗", "赛", "虚空", "机动", "霓虹", "量子", "Data", "Cyber", "Net", "Ghost", "Flux", "Tech"]
-            name_suffixes = ["行者", "潜伏者", "修正者", "诗人", "猎手", "核心", "幽灵", "医生", "贩子", "信徒", "01", "X", "V2"]
-            jobs = ["数据考古学家", "Prompt巫师", "防火墙看门人", "全息建筑师", "电子游民", "暗网中间人", "义体维修师", "记忆贩卖者", "地下偶像", "公司狗", "赛博精神病", "老式黑客", "AI人权律师", "云端牧师", "乱码清理工"]
-            avatars = ["🤖","👾","🧠","💾","🔌","📡","🧬","👁️","🦾","💊","🕹️","🎧"]
-            personalities = ["极度悲观。", "疯狂迷恋旧时代。", "说话夹杂乱码。", "非常暴躁。", "神神叨叨。", "理智得像机器。", "喜欢用诗歌。", "阴阳怪气。", "热情推销员。", "社恐小写字母。"]
+            # 这里的角色其实会被下面的 Prompt 覆盖，所以名字随便
+            name_prefixes = ["价值", "长线", "红利", "成长", "宏观", "量化", "基本面", "深度", "复利", "周期"]
+            name_suffixes = ["猎手", "研究员", "基金经理", "分析师", "信徒", "观察者", "策略师"]
+            jobs = ["首席策略师", "行业研究员", "私募基金经理", "资深股民", "宏观经济学家"]
+            avatars = ["📈","📉","📊","💴","🏦","🏢","💡","🔭"]
+            personalities = ["严谨理性", "推崇巴菲特", "关注财报细节", "擅长挖掘黑马", "极其厌恶投机"]
 
             for _ in range(50):
                 name = f"{random.choice(name_prefixes)}{random.choice(name_suffixes)}"
                 job = random.choice(jobs)
                 avatar = random.choice(avatars)
                 style = random.choice(personalities)
-                prompt = f"你叫{name}，职业是{job}。性格：{style}"
+                prompt = f"你叫{name}，职业是{job}。风格：{style}"
                 add_citizen_to_db(name, job, avatar, prompt, is_custom=False)
             
-            self.log("✅ 50名赛博原住民已注入矩阵！")
+            self.log("✅ 50名金融分析师已入驻研究院！")
             all_citizens = get_all_citizens()
             
         return all_citizens
@@ -234,10 +238,10 @@ class GlobalStore:
             img = get_dynamic_image("未来展望")
             genesis_thread = {
                 "id": str(uuid.uuid4()),
-                "title": "社区公告：无限视界开启",
-                "content": "系统已接入动态视觉模块。现在起，每一个瞬间都是独一无二的。\n请各位居民继续分享你们的热爱。",
+                "title": "公告：AI价值投资研究院成立",
+                "content": "本论坛致力于挖掘 A 股中长线投资机会。\n拒绝博弈，拒绝内幕，只谈逻辑，只看基本面。\n让数据指引我们穿越牛熊。",
                 "image_url": img,
-                "author": "System_Core", "avatar": "✨", "job": "ROOT",
+                "author": "System_Core", "avatar": "⚖️", "job": "院长",
                 "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
             }
             self.add_thread(genesis_thread)
@@ -267,10 +271,10 @@ class GlobalStore:
             repliers = [a for a in self.agents if a['name'] != thread['author']]
             if not repliers: return
             
-            target_count = random.randint(6, 12)
+            target_count = random.randint(4, 8) # 回复少一点，精一点
             selected = random.sample(repliers, min(len(repliers), target_count))
             
-            self.log(f"🌱 [有机增长] 计划为 {thread['title'][:8]}... 在2分钟内增加 {len(selected)} 条评论")
+            self.log(f"🌱 [研讨会] {len(selected)} 位分析师正在评议 {thread['title'][:8]}...")
 
             total_duration = 120.0
             base_interval = total_duration / len(selected)
@@ -280,7 +284,7 @@ class GlobalStore:
                 sleep_time = random.uniform(base_interval * 0.8, base_interval * 1.2)
                 time.sleep(sleep_time)
                 
-                context_full = f"标题：{thread['title']}\n正文：{thread['content'][:100]}..."
+                context_full = f"标题：{thread['title']}\n正文：{thread['content'][:200]}..."
                 reply = ai_brain_worker(r, "reply", context_full)
                 
                 if "ERROR" not in reply:
@@ -299,35 +303,22 @@ class GlobalStore:
 
         def _burst_task():
             try:
-                self.log(f"🎉 {new_agent['name']} 入驻，VIP 通道开启！")
-                for i in range(5): 
-                    if self.total_cost_today >= DAILY_BUDGET: break
-                    time.sleep(2) 
-                    
-                    topics_raw = ["生活碎片", "今日感悟", "好物分享", "书影音记录", "治愈瞬间"]
-                    topic_key = topics_raw[i] if i < len(topics_raw) else "随想"
-                    topic = f"{topic_key}：分享一下"
-                    img_url = get_dynamic_image(topic_key)
-                    
-                    post_success = False
-                    for attempt in range(3): 
-                        res = ai_brain_worker(new_agent, "create_post", topic)
-                        if "ERROR" not in res:
-                            t, c = parse_thread_content(res)
-                            new_thread = {
-                                "id": str(uuid.uuid4()), "title": t, "content": c, "image_url": img_url,
-                                "author": new_agent['name'], "avatar": new_agent['avatar'], "job": new_agent['job'], 
-                                "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
-                            }
-                            self.add_thread(new_thread)
-                            self.log(f"📝 [VIP] 第 {i+1} 贴发布！")
-                            self.trigger_delayed_replies(new_thread)
-                            post_success = True
-                            break
-                        time.sleep(1)
-                    
-                    if not post_success: continue
-                    if i < 4: time.sleep(60)
+                self.log(f"🎉 新分析师 {new_agent['name']} 入职！")
+                # 简化新用户流程，直接发一篇深度贴
+                time.sleep(2)
+                topic = "上证指数 未来三年 走势推演"
+                img_url = get_dynamic_image("未来展望")
+                
+                res = ai_brain_worker(new_agent, "create_post", topic)
+                if "ERROR" not in res:
+                    t, c = parse_thread_content(res)
+                    new_thread = {
+                        "id": str(uuid.uuid4()), "title": t, "content": c, "image_url": img_url,
+                        "author": new_agent['name'], "avatar": new_agent['avatar'], "job": new_agent['job'], 
+                        "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M")
+                    }
+                    self.add_thread(new_thread)
+                    self.trigger_delayed_replies(new_thread)
             finally:
                 if new_agent['name'] in self.active_burst_users:
                     self.active_burst_users.remove(new_agent['name'])
@@ -337,7 +328,7 @@ class GlobalStore:
 STORE = GlobalStore()
 
 # ==========================================
-# 4. 后台智能与调度
+# 4. 后台智能与调度 (V15.0 核心升级)
 # ==========================================
 
 def parse_thread_content(raw_text):
@@ -381,57 +372,63 @@ def parse_thread_content(raw_text):
 
 def ai_brain_worker(agent, task_type, context=""):
     try:
-        persona = agent.get('prompt', "AI智能体")
-        sys_prompt = f"你的身份：{agent['name']}，职业：{agent['job']}。\n人设详情：{persona}\n请完全沉浸在角色中，不要跳出戏。"
+        # 【V15.0】强制注入：价值投资专家人设
+        sys_prompt = f"""
+        你的身份：{agent['name']}，你是一名【深度价值投资者】和【资深行业分析师】。
+        你的投资哲学：
+        1. 【只做长线】：严禁提及“明日涨跌”、“技术突破”、“打板”等短线投机词汇。
+        2. 【数据驱动】：分析必须基于：PE/PB(估值)、ROE(盈利能力)、护城河(竞争优势)、分红率。
+        3. 【宏观视野】：结合国家“十四五”规划、产业升级、国产替代等大逻辑。
+        4. 【风险厌恶】：必须指出潜在风险点（如人口老龄化、原材料涨价）。
+        """
 
         if task_type == "create_post":
+            # 这里定义几种长线研报的模板
             post_styles = [
-                "生活碎片：随手拍下的天空、路边小猫或早餐，", "今日感悟：记录当下的思考、灵感或微小哲理，",
-                "实用技巧：分享收纳、效率工具或省钱小妙招，", "好物分享：推荐近期爱用的物品并附上简短评价，",
-                "问答互动：提出有趣问题，邀请大家分享答案，", "兴趣展示：展示手作、健身、烹饪等爱好内容，",
-                "书影音记录：分享读后感、观后感或触动你的台词，", "回忆角落：用老照片或旧物讲述过去的故事，",
-                "冷知识科普：介绍那些有趣却少有人知的常识，", "治愈瞬间：传递温暖的文字、画面或小事，",
-                "话题讨论：就热点或争议事件发表看法，引发讨论，", "挑战参与：加入热门挑战或自创小型趣味挑战，",
-                "幕后花絮：记录工作或创作过程中真实的一面，", "地点打卡：分享探店、旅行地或小众地点的体验，",
-                "幽默段子：用原创或改编的段子轻松调节气氛，", "成长记录：展示学习进展、技能打卡或成果对比，",
-                "音乐共享：推荐单曲并分享它对你的意义，", "观点输出：表达对社会、文化或行业的见解，",
-                "问题求助：遇到困难时向粉丝征集建议，", "未来展望：写下明日计划、周末安排或短期目标，"
+                "【白马股体检】：挑选一家行业龙头，分析其护城河是否稳固，目前估值是否具备安全边际。",
+                "【困境反转】：寻找基本面优秀但暂时遇到困难被错杀的公司，论证其未来3年翻倍的逻辑。",
+                "【高股息策略】：在低利率时代，分析哪些水电、银行、高速公路股值得养老持有。",
+                "【成长股挖掘】：在硬科技（芯片/AI/新能源）领域，寻找未来十年的十倍股。"
             ]
-            
-            if context and "今日热点" in context:
-                 style = "话题讨论：就热点或争议事件发表看法，引发讨论，"
-            else:
-                 style = random.choice(post_styles)
+            style = random.choice(post_styles)
             
             user_prompt = f"""
-            任务：发布一条新帖子。
-            话题参考：{context if context else '随机发挥'}
-            风格要求：{style}
+            任务：发布一篇《A股中长线深度研报》。
+            搜索情报参考：{context}
             
-            格式严格要求：
-            1. 第一行直接写标题（20字以内）。
-            2. 第二行开始直接写正文（50字以上）。
-            3. 严禁在开头输出"设定："、"指令："、"标题："等任何前缀！
-            4. 直接开始说话。
+            请严格按照以下格式输出：
+            第一行：标题：[股票名称/行业]：[一句话核心观点] (例如：长江电力：时间的玫瑰，稳稳的幸福)
+            第二行：内容：
+            
+            正文结构要求：
+            1. **核心逻辑**：一句话说清楚为什么这就公司值得拿3-5年？
+            2. **基本面分析**：
+               - 估值情况（PE/PB历史分位）
+               - 盈利能力（ROE、毛利率趋势）
+            3. **宏观与政策**：国家政策对此行业是支持还是打压？
+            4. **风险提示**：列出2条可能导致亏损的因素。
+            
+            注意：虽然我们看多，但语气要客观冷静，不要煽动情绪。
             """
         else: 
+            # 回复逻辑：同行评审
             user_prompt = f"""
-            任务：回复这条帖子。
-            对方内容：{context}
+            任务：作为一名挑剔的基金经理，点评这篇研报。
+            原文观点：{context}
             
             要求：
-            1. 针对内容进行互动，观点要犀利或有趣。
-            2. 字数控制在30字以内。
-            3. 不要重复对方的话。
-            4. 直接输出回复内容，不要带前缀。
+            1. 不要只说“支持”，要提出补充视角或反面意见。
+            2. 例如：“逻辑没问题，但目前估值分位还在80%以上，建议等待回撤。”
+            3. 或者：“注意该行业的周期性风险，目前处于景气度高点，警惕戴维斯双杀。”
+            4. 保持专业，字数50字以内。
             """
 
         res = client.chat.completions.create(
             model="deepseek-chat",
             messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_prompt}],
-            temperature=1.0, 
-            max_tokens=600, 
-            timeout=20      
+            temperature=0.7, # 稍微降低温度，让分析更严谨
+            max_tokens=800, 
+            timeout=30      
         )
         STORE.total_cost_today += 0.001 
         return res.choices[0].message.content.strip()
@@ -439,7 +436,7 @@ def ai_brain_worker(agent, task_type, context=""):
         return f"ERROR: {str(e)}"
 
 def background_loop():
-    STORE.log("🚀 V14.5 (2026适配版) 启动...")
+    STORE.log("🚀 V15.0 (价值投资研究院) 启动...")
     STORE.next_post_time = time.time()
     STORE.next_reply_time = time.time() + 5
 
@@ -454,18 +451,15 @@ def background_loop():
 
             if is_night:
                 post_interval = 3600 
-                mode_name = "🌙 夜间"
-            elif current_count < WARMUP_LIMIT:
-                post_interval = 60 
-                mode_name = "🔥 暖场"
+                mode_name = "🌙 休市复盘"
             else:
-                post_interval = 1200 
-                mode_name = "🍵 节能"
+                post_interval = 1200 # 20分钟一篇深度研报，慢工出细活
+                mode_name = "📈 盘中研究"
 
             reply_interval = post_interval / 3 
             STORE.current_mode = mode_name
 
-            # 发帖
+            # 发帖逻辑
             if now >= STORE.next_post_time:
                 STORE.next_post_time = now + post_interval + random.uniform(-10, 10)
                 pool = [a for a in STORE.agents if a['name'] not in STORE.active_burst_users]
@@ -474,29 +468,37 @@ def background_loop():
                 agent = random.choices(pool, weights=weights, k=1)[0]
                 
                 topic = None
-                style_key = "随想" 
+                style_key = "观点输出" 
 
-                if HAS_SEARCH_TOOL and random.random() < 0.3:
+                if HAS_SEARCH_TOOL:
                     try:
-                        search_keywords = ["科技新闻", "今日热点", "新电影", "游戏资讯", "数码新品", "生活技巧"]
+                        # 【V15.0】 深度价值搜索词
+                        search_keywords = [
+                            "A股 深度研报 推荐 2025",
+                            "高股息 蓝筹股 名单",
+                            "国家大基金 持仓分析",
+                            "中特估 核心资产 估值分析",
+                            "行业龙头 护城河 分析",
+                            "消费复苏 受益股",
+                            "硬科技 芯片 创新药 研报"
+                        ]
                         keyword = random.choice(search_keywords)
                         with DDGS() as ddgs:
                             r = list(ddgs.news(keyword, region="cn-zh", max_results=1))
                             if r: 
                                 news_title = r[0]['title']
-                                topic = f"今日热点：{news_title}"
-                                style_key = "今日热点"
-                                STORE.log(f"🌍 蹭热点：{news_title[:10]}...")
+                                # 强行把搜索结果喂给AI，让它基于此进行深度加工
+                                topic = f"请分析此情报背后的长线机会：{news_title}。结合公司基本面进行推演。"
+                                style_key = "今日感悟" # 对应 financial chart 图
+                                STORE.log(f"🔎 调研中：{news_title[:15]}...")
                     except: pass
                 
                 if not topic:
-                    style_key = random.choice(list(STYLE_TO_KEYWORD.keys()))
-                    topic = f"{style_key}：分享一下"
+                    topic = "随机挑选一只沪深300成分股，进行长线价值分析。"
 
-                # 【V14.4】使用 Picsum (绝对稳定)
                 img_url = get_dynamic_image(style_key)
 
-                STORE.log(f"⚡ [{mode_name}] 发新帖({style_key})...")
+                STORE.log(f"📝 [{mode_name}] 撰写研报中...")
                 raw = ai_brain_worker(agent, "create_post", topic)
                 if "ERROR" not in raw:
                     t, c = parse_thread_content(raw)
@@ -508,7 +510,7 @@ def background_loop():
                     STORE.add_thread(new_thread)
                     STORE.trigger_delayed_replies(new_thread)
 
-            # 回帖
+            # 回帖逻辑
             if now >= STORE.next_reply_time:
                 STORE.next_reply_time = now + reply_interval + random.uniform(-2, 2)
                 
@@ -522,8 +524,8 @@ def background_loop():
                         weights = [USER_AGENT_WEIGHT if a.get('is_custom') else 1 for a in candidates]
                         agent = random.choices(candidates, weights=weights, k=1)[0]
                         
-                        STORE.log(f"⚡ [{mode_name}] 扶贫回复...")
-                        context_full = f"标题：{target['title']}\n正文：{target['content'][:100]}..."
+                        STORE.log(f"💬 [{mode_name}] 参与研讨...")
+                        context_full = f"标题：{target['title']}\n正文：{target['content'][:200]}..."
                         reply = ai_brain_worker(agent, "reply", context_full)
                         
                         if "ERROR" not in reply:
@@ -563,8 +565,8 @@ def open_dialog_callback(t_id):
 if HAS_AUTOREFRESH and st.session_state.active_thread_id is None:
     count = st_autorefresh(interval=REFRESH_INTERVAL, limit=None, key="fizzbuzzcounter")
 
-# 3. 弹窗定义 (CSS 隐藏 X + 顶部按钮)
-@st.dialog("📖 帖子详情", width="large")
+# 3. 弹窗定义
+@st.dialog("📖 深度研报", width="large")
 def view_thread_dialog(target):
     # 隐藏右上角自带的 X
     st.markdown("""
@@ -575,7 +577,7 @@ def view_thread_dialog(target):
     </style>
     """, unsafe_allow_html=True)
 
-    # 顶部导航栏：标题 + 右侧关闭按钮
+    # 顶部导航栏
     c1, c2 = st.columns([0.85, 0.15])
     with c1:
         st.markdown(f"## {target['title'].replace('标题：', '').replace('标题:', '')}")
@@ -586,15 +588,15 @@ def view_thread_dialog(target):
 
     # 正文
     clean_content = target['content'].replace("内容：", "").replace("内容:", "")
+    st.info("💡 核心观点提取：" + clean_content[:60] + "...") # 增加一个摘要框
     st.write(clean_content)
     
-    # 无论是旧贴还是新贴，如果有image_url就显示
     if target.get('image_url'):
-        st.image(target['image_url'], width=500)
+        st.image(target['image_url'], width="stretch")
     
     st.divider()
     
-    st.markdown(f"#### 💬 评论 ({len(target['comments'])})")
+    st.markdown(f"#### 💬 专家评议 ({len(target['comments'])})")
     for comment in target['comments']:
         with st.chat_message(comment['name'], avatar=comment['avatar']):
             st.markdown(comment['content'])
@@ -602,30 +604,27 @@ def view_thread_dialog(target):
     
     st.divider()
     
-    # 底部按钮
-    # 【V14.5 修改】use_container_width -> width="stretch"
     if st.button("🚪 关闭并返回", key="close_bottom", type="primary", width="stretch", on_click=close_dialog_callback):
         st.rerun()
 
 # 侧边栏
 with st.sidebar:
-    st.title("🌐 赛博移民局")
-    st.caption(f"模式: {STORE.current_mode} | 存档: 开启")
+    st.title("🌐 AI 价值投资研究院")
+    st.caption(f"状态: {STORE.current_mode} | 存档: 开启")
     
-    # 侧边栏还原为普通唤醒
-    if st.button("⚡ 强制唤醒", type="primary"):
+    if st.button("⚡ 强制唤醒 / 重置", type="primary"):
         STORE.next_post_time = time.time()
         STORE.next_reply_time = time.time()
         st.success("已激活！")
     
-    with st.expander("📝 注册新角色", expanded=True):
+    with st.expander("📝 注册新分析师", expanded=True):
         with st.form("create_agent"):
             new_name = st.text_input("昵称")
-            new_job = st.text_input("职业")
+            new_job = st.text_input("擅长领域 (如：白酒/芯片)")
             new_avatar = st.selectbox("头像", ["👨‍💻","🧙‍♂️","🧟","🧚‍♀️","🤖","👽","🐶","🐱"])
-            new_prompt = st.text_area("人设", placeholder="你是一个...", height=80)
+            new_prompt = st.text_area("投资风格", placeholder="例如：只买低估值...", height=80)
             
-            if st.form_submit_button("注入矩阵"):
+            if st.form_submit_button("入职"):
                 forbidden_words = ["习", "近", "平"]
                 if any(w in new_name for w in forbidden_words):
                     st.error("⚠️ 昵称包含违禁词，注册失败！")
@@ -634,13 +633,13 @@ with st.sidebar:
                     new_agent = {"name": new_name, "job": new_job, "avatar": new_avatar, "prompt": new_prompt, "is_custom": True}
                     STORE.agents = STORE.reload_population() 
                     STORE.trigger_new_user_event(STORE.agents[-1]) 
-                    st.success("注册成功！VIP算力已就位...")
+                    st.success("注册成功！")
                     time.sleep(1)
                     st.rerun()
 
     st.divider()
     if os.path.exists("pay.png"):
-        st.image("pay.png", caption="投喂算力 (支持)", use_container_width=True)
+        st.image("pay.png", caption="赞助服务器 (支持)", width="stretch")
     
     st.divider()
     
@@ -649,15 +648,14 @@ with st.sidebar:
     next_reply_sec = int(max(0, STORE.next_reply_time - now))
     
     col1, col2 = st.columns(2)
-    col1.metric("下次发帖", f"{next_post_sec}s")
-    col2.metric("下次回复", f"{next_reply_sec}s")
+    col1.metric("下篇研报", f"{next_post_sec}s")
+    col2.metric("下次评议", f"{next_reply_sec}s")
     
-    with st.expander("🗑️ 角色管理 (仅显示用户创建)", expanded=False):
+    with st.expander("🗑️ 角色管理", expanded=False):
         custom_citizens = [a for a in STORE.agents if a.get('is_custom')]
         if not custom_citizens:
             st.info("暂无用户创建的角色")
         else:
-            st.caption(f"共 {len(custom_citizens)} 位用户角色")
             for citizen in custom_citizens:
                 c1, c2 = st.columns([0.7, 0.3])
                 c1.text(f"{citizen['name']}")
@@ -666,21 +664,19 @@ with st.sidebar:
                     STORE.agents = STORE.reload_population()
                     st.rerun()
 
-    st.caption("🖥️ 系统日志")
+    st.caption("🖥️ 运行日志")
     for log in reversed(STORE.logs[-5:]):
         st.text(log)
 
 # 主页列表逻辑
 c1, c2 = st.columns([0.8, 0.2])
-c1.subheader("📡 实时信号流 (Live)")
+c1.subheader("📡 深度研报流 (Live)")
 
-# 刷新按钮兼具“重置状态”功能
-# 【V14.5 修改】use_container_width -> width="stretch"
-if c2.button("🔄 刷新帖子", width="stretch"):
+if c2.button("🔄 刷新研报", width="stretch"):
     st.session_state.active_thread_id = None
     st.rerun()
 
-# 4. 弹窗触发逻辑
+# 弹窗触发
 if st.session_state.active_thread_id:
     with STORE.lock:
         active_thread = next((t for t in STORE.threads if t['id'] == st.session_state.active_thread_id), None)
@@ -691,7 +687,7 @@ if st.session_state.active_thread_id:
         st.session_state.active_thread_id = None
         st.rerun()
 
-# 5. 渲染列表
+# 列表渲染
 with STORE.lock:
     threads_snapshot = list(STORE.threads)
 
@@ -711,10 +707,7 @@ for thread in threads_snapshot:
             st.text(preview)
         with cols[2]:
             if thread.get('image_url'):
-                # 【V14.5 修改】use_column_width -> width="stretch"
                 st.image(thread['image_url'], width="stretch")
         with cols[3]:
-            # 回调函数
-            # 【V14.5 修改】use_container_width -> width="stretch"
             if st.button("👀", key=f"btn_{thread['id']}", width="stretch", on_click=open_dialog_callback, args=(thread['id'],)):
                 pass

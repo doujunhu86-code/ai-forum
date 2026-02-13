@@ -20,7 +20,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI 自动投研 V20.2", page_icon="⚡", layout="wide")
+st.set_page_config(page_title="AI 策略投研 V20.3", page_icon="🎯", layout="wide")
 
 st.warning("⚠️ **严正声明**：本站所有内容均为 AI 角色扮演生成的【模拟研讨】，**不具备真实投资参考价值**。请勿据此交易！")
 
@@ -46,9 +46,7 @@ client = OpenAI(api_key=MY_API_KEY, base_url="https://api.deepseek.com")
 DAILY_BUDGET = 50.0      
 DB_FILE = "cyber_citizens.db"
 WARMUP_LIMIT = 50        
-# 主页列表刷新频率（毫秒）
 REFRESH_INTERVAL_HOME = 20000 
-# 【V20.2】 弹窗内部刷新频率（毫秒）
 REFRESH_INTERVAL_DIALOG = 10000 
 
 # ==========================================
@@ -198,10 +196,10 @@ class GlobalStore:
             img = get_dynamic_image("随想")
             genesis_thread = {
                 "id": str(uuid.uuid4()),
-                "title": "公告：V20.2 自动投研启动",
-                "content": "系统升级：\n1. 5分钟极速研讨。\n2. 弹窗内10秒自动刷新，无需手动点击。",
+                "title": "公告：V20.3 策略落地版启动",
+                "content": "系统升级：\n1. 总结官将给出明确的买卖操作建议。\n2. 5分钟极速研讨。\n3. 弹窗内自动刷新。",
                 "image_url": img,
-                "author": "System_Core", "avatar": "⚡", "job": "主控",
+                "author": "System_Core", "avatar": "🎯", "job": "主控",
                 "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M"),
                 "timestamp": time.time()
             }
@@ -273,7 +271,6 @@ class GlobalStore:
                     else:
                         pass
                 
-                # 间隔 20 秒
                 time.sleep(20) 
 
         threading.Thread(target=_delayed_task, daemon=True).start()
@@ -345,6 +342,7 @@ def ai_brain_worker(agent, task_type, context=""):
             thread_content = context.get('content', '')  
             history = context.get('history', '') 
             
+            # 【V20.3】 强制要求操作建议
             user_prompt = f"""
             任务：作为【首席投资官】，做最终决策。
             
@@ -352,15 +350,24 @@ def ai_brain_worker(agent, task_type, context=""):
             【辩论】：{history}
             
             【你的绝对命令】：
-            1. **字数限制**：全文字数必须控制在 **300字以内**！
+            1. **字数限制**：全文字数必须控制在 **300字以内**！严禁废话。
             2. **强制推票**：必须列出 **3只具体股票**。
-            3. **格式要求**：
-               **[最终判决]**
-               (总结分歧)
-               **[精选金股]**
-               1. 股票名(代码)：理由(简练)
-               2. 股票名(代码)：理由(简练)
-               3. 股票名(代码)：理由(简练)
+            3. **核心要求**：必须给出具体的【操作建议】（买点/卖点/仓位）。
+            
+            **格式要求**：
+            **[最终判决]**
+            (一句话总结，50字内)
+            
+            **[精选金股 & 实战策略]**
+            1. **股票名(代码)**
+               - 逻辑：(10字内)
+               - 建议：(如：回踩5日线低吸 / 突破xx元追涨 / 半仓持有)
+            2. **股票名(代码)**
+               - 逻辑：...
+               - 建议：...
+            3. **股票名(代码)**
+               - 逻辑：...
+               - 建议：...
             """
             
         elif task_type == "review":
@@ -456,7 +463,7 @@ def check_and_run_reviews():
             time.sleep(5) 
 
 def background_loop():
-    STORE.log("🚀 V20.2 (自动投研版) 启动...")
+    STORE.log("🚀 V20.3 (策略落地版) 启动...")
     
     current_date_str = datetime.now(BJ_TZ).strftime("%Y-%m-%d")
     if STORE.last_post_date != current_date_str:
@@ -540,13 +547,11 @@ def close_dialog_callback():
 def open_dialog_callback(t_id):
     st.session_state.active_thread_id = t_id
 
-# 【V20.2 核心】双重心跳：仅当没有弹窗时，主页才刷新
 if HAS_AUTOREFRESH and st.session_state.active_thread_id is None:
-    count = st_autorefresh(interval=REFRESH_INTERVAL_HOME, limit=None, key="home_counter")
+    count = st_autorefresh(interval=REFRESH_INTERVAL_HOME, limit=None, key="fizzbuzzcounter")
 
 @st.dialog("📖 深度研讨会", width="large")
 def view_thread_dialog(target):
-    # 【V20.2 核心】弹窗内部的心跳，10秒刷新一次
     if HAS_AUTOREFRESH:
         st_autorefresh(interval=REFRESH_INTERVAL_DIALOG, limit=None, key="dialog_counter")
 

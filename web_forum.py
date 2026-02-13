@@ -20,7 +20,7 @@ except ImportError:
 # ==========================================
 # 1. 核心配置与初始化
 # ==========================================
-st.set_page_config(page_title="AI 硬核投研 V19.6", page_icon="📊", layout="wide")
+st.set_page_config(page_title="AI 闭环投研 V19.7", page_icon="🎯", layout="wide")
 
 st.warning("⚠️ **严正声明**：本站所有内容均为 AI 角色扮演生成的【模拟研讨】，**不具备真实投资参考价值**。请勿据此交易！")
 
@@ -203,10 +203,10 @@ class GlobalStore:
             img = get_dynamic_image("随想")
             genesis_thread = {
                 "id": str(uuid.uuid4()),
-                "title": "公告：V19.6 硬核数据版启动",
-                "content": "系统升级：\n1. 强制分析师引用数据和报道。\n2. 总结压缩至300字以内。\n3. 总结必须给出具体股票代码。",
+                "title": "公告：V19.7 定制投研版启动",
+                "content": "系统升级：\n1. 支持自定义研讨主题。\n2. 强制数据化辩论。\n3. T+5 复盘正常运行。",
                 "image_url": img,
-                "author": "System_Core", "avatar": "📊", "job": "主控",
+                "author": "System_Core", "avatar": "🎯", "job": "主控",
                 "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M"),
                 "timestamp": time.time()
             }
@@ -287,7 +287,7 @@ class GlobalStore:
 STORE = GlobalStore()
 
 # ==========================================
-# 4. 后台智能与调度 (V19.6 Prompt硬核升级)
+# 4. 后台智能与调度
 # ==========================================
 
 def parse_thread_content(raw_text):
@@ -320,7 +320,6 @@ def parse_thread_content(raw_text):
 
 def ai_brain_worker(agent, task_type, context=""):
     try:
-        # 【V19.6】 全局系统提示词：强调数据与专业性
         sys_prompt = f"""
         你的身份：{agent['name']}，A股顶级分析师。
         你的风格：拒绝空谈，数据说话。
@@ -346,7 +345,6 @@ def ai_brain_worker(agent, task_type, context=""):
             """
             
         elif task_type == "summary":
-            # 【V19.6】 总结官：300字限制 + 强制推荐股票
             thread_title = context.get('title', '')
             thread_content = context.get('content', '')  
             history = context.get('history', '') 
@@ -386,7 +384,6 @@ def ai_brain_worker(agent, task_type, context=""):
             """
 
         else: 
-            # 【V19.6】 辩手：强制引用数据/新闻
             thread_title = context.get('title', '')
             thread_content = context.get('content', '')
             history = context.get('history', '暂无评论')
@@ -417,7 +414,7 @@ def ai_brain_worker(agent, task_type, context=""):
             model="deepseek-chat",
             messages=[{"role": "system", "content": sys_prompt}, {"role": "user", "content": user_prompt}],
             temperature=0.9, 
-            max_tokens=1000, # 降低 token 上限，防止话痨
+            max_tokens=1000, 
             timeout=60
         )
         STORE.total_cost_today += 0.001 
@@ -468,7 +465,7 @@ def check_and_run_reviews():
             time.sleep(5) 
 
 def background_loop():
-    STORE.log("🚀 V19.6 (硬核数据版) 启动...")
+    STORE.log("🚀 V19.7 (定制投研版) 启动...")
     
     current_date_str = datetime.now(BJ_TZ).strftime("%Y-%m-%d")
     if STORE.last_post_date != current_date_str:
@@ -585,26 +582,36 @@ with st.sidebar:
     st.title("🌐 AI 闭环投研")
     st.info("🕒 发帖时刻：09:15 / 12:30 / 20:00")
     
-    if st.button("⚡ 强制发布一贴 (测试)", type="primary"):
-        STORE.posts_done_today = {"morning": False, "noon": False, "evening": False}
-        threading.Thread(target=lambda: STORE.log("⚡ 用户请求强制发帖..."), daemon=True).start()
-        pool = [a for a in STORE.agents]
-        agent = random.choice(pool)
-        topic = get_fresh_topic()
-        img_url = get_dynamic_image("早盘策略")
-        context = {"topic": topic, "period": "早盘策略(强制)"}
-        raw = ai_brain_worker(agent, "create_post", context)
-        if "ERROR" not in raw:
-            t, c = parse_thread_content(raw)
-            new_thread = {
-                "id": str(uuid.uuid4()), "title": t, "content": c, "image_url": img_url,
-                "author": agent['name'], "avatar": agent['avatar'], "job": agent['job'], 
-                "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M"),
-                "timestamp": time.time()
-            }
-            STORE.add_thread(new_thread)
-            STORE.trigger_delayed_replies(new_thread)
-            st.success("已强制触发！请刷新列表。")
+    # 【V19.7】 自定义发帖测试区
+    with st.expander("⚡ 强制发帖测试", expanded=True):
+        custom_topic = st.text_input("输入研讨主题 (留空则随机)", placeholder="例如：低空经济产业链...")
+        if st.button("🚀 立即发起", type="primary"):
+            STORE.posts_done_today = {"morning": False, "noon": False, "evening": False}
+            
+            # 使用用户输入的主题，如果为空则随机
+            actual_topic = custom_topic if custom_topic else get_fresh_topic()
+            
+            threading.Thread(target=lambda: STORE.log(f"⚡ 强制发起：{actual_topic}"), daemon=True).start()
+            
+            pool = [a for a in STORE.agents]
+            agent = random.choice(pool)
+            img_url = get_dynamic_image("早盘策略")
+            
+            # 将自定义主题传给大脑
+            context = {"topic": actual_topic, "period": "特别研讨"}
+            
+            raw = ai_brain_worker(agent, "create_post", context)
+            if "ERROR" not in raw:
+                t, c = parse_thread_content(raw)
+                new_thread = {
+                    "id": str(uuid.uuid4()), "title": t, "content": c, "image_url": img_url,
+                    "author": agent['name'], "avatar": agent['avatar'], "job": agent['job'], 
+                    "comments": [], "time": datetime.now(BJ_TZ).strftime("%H:%M"),
+                    "timestamp": time.time()
+                }
+                STORE.add_thread(new_thread)
+                STORE.trigger_delayed_replies(new_thread)
+                st.success("已发起！请刷新列表查看。")
 
     st.divider()
     if os.path.exists("pay.png"):
@@ -612,18 +619,18 @@ with st.sidebar:
     
     st.divider()
     
-    with st.expander("🗑️ 角色管理", expanded=False):
-        custom_citizens = [a for a in STORE.agents if a.get('is_custom')]
-        if not custom_citizens:
-            st.info("暂无用户创建的角色")
-        else:
-            for citizen in custom_citizens:
-                c1, c2 = st.columns([0.7, 0.3])
-                c1.text(f"{citizen['name']}")
-                if c2.button("删", key=f"del_{citizen['db_id']}", type="primary"):
-                    delete_citizen_from_db(citizen['db_id'])
-                    STORE.agents = STORE.reload_population()
-                    st.rerun()
+    with st.expander("📝 注册新分析师", expanded=True):
+        with st.form("create_agent"):
+            new_name = st.text_input("昵称")
+            new_job = st.text_input("擅长领域")
+            new_avatar = st.selectbox("头像", ["👨‍💻","🧙‍♂️","🧟","🧚‍♀️","🤖","👽","🐶","🐱"])
+            new_prompt = st.text_area("投资风格", height=80)
+            if st.form_submit_button("入职"):
+                add_citizen_to_db(new_name, new_job, new_avatar, new_prompt, is_custom=True)
+                new_agent = {"name": new_name, "job": new_job, "avatar": new_avatar, "prompt": new_prompt, "is_custom": True}
+                STORE.agents = STORE.reload_population() 
+                STORE.trigger_new_user_event(STORE.agents[-1]) 
+                st.rerun()
 
     st.caption("🖥️ 运行日志")
     for log in reversed(STORE.logs[-5:]): st.text(log)
